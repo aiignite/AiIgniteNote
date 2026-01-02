@@ -1,0 +1,241 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// 用户表
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  username      String?   @unique
+  passwordHash  String    @map("password_hash")
+  displayName   String?   @map("display_name")
+  avatar        String?
+  preferences   Json?     // 使用 PostgreSQL 的 JSONB 类型
+  isActive      Boolean   @default(true) @map("is_active")
+  emailVerified Boolean   @default(false) @map("email_verified")
+  lastLoginAt   DateTime? @map("last_login_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  // 关系
+  notes            Note[]
+  categories       Category[]
+  aiAssistants     AiAssistant[]
+  modelConfigs     ModelConfig[]
+  aiConversations  AiConversation[]
+  refreshTokens    RefreshToken[]
+
+  @@map("users")
+}
+
+// 刷新令牌表
+model RefreshToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String   @map("user_id")
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  revokedAt DateTime? @map("revoked_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+// 分类表
+model Category {
+  id        String   @id @default(cuid())
+  name      String
+  icon      String?
+  color     String?
+  sortOrder Int      @default(0) @map("sort_order")
+  userId    String?  @map("user_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // 关系
+  user  User?  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  notes Note[]
+
+  @@unique([userId, name])
+  @@index([userId])
+  @@map("categories")
+}
+
+// 笔记表
+model Note {
+  id          String    @id @default(cuid())
+  title       String
+  content     String    @default("")
+  htmlContent String?   @map("html_content")
+  fileType    String    @default("markdown") @map("file_type") // markdown, richtext, drawio, mindmap
+  metadata    Json?     // 使用 PostgreSQL 的 JSONB 类型存储扩展数据
+  tags        String[]  @default([]) // 使用 PostgreSQL 的数组类型
+  isDeleted   Boolean   @default(false) @map("is_deleted")
+  isFavorite  Boolean   @default(false) @map("is_favorite")
+  version     Int       @default(1)
+  userId      String    @map("user_id")
+  categoryId  String    @map("category_id")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  deletedAt   DateTime? @map("deleted_at")
+
+  // 关系
+  user         User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category     Category          @relation(fields: [categoryId], references: [id])
+  versions     NoteVersion[]
+  conversations AiConversation[]
+  attachments   Attachment[]
+
+  @@index([userId])
+  @@index([categoryId])
+  @@index([isDeleted])
+  @@index([userId, isDeleted])
+  @@map("notes")
+}
+
+// 笔记版本历史表
+model NoteVersion {
+  id        String   @id @default(cuid())
+  noteId    String   @map("note_id")
+  title     String
+  content   String
+  version   Int
+  createdAt DateTime @default(now()) @map("created_at")
+
+  note Note @relation(fields: [noteId], references: [id], onDelete: Cascade)
+
+  @@index([noteId])
+  @@index([noteId, version])
+  @@map("note_versions")
+}
+
+// 附件表
+model Attachment {
+  id          String   @id @default(cuid())
+  noteId      String   @map("note_id")
+  name        String
+  fileType    String   @map("file_type")
+  fileSize    Int      @map("file_size")
+  filePath    String   @map("file_path")
+  mimeType    String   @map("mime_type")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  note Note @relation(fields: [noteId], references: [id], onDelete: Cascade)
+
+  @@index([noteId])
+  @@map("attachments")
+}
+
+// AI助手配置表
+model AiAssistant {
+  id            String   @id @default(cuid())
+  name          String
+  description   String?
+  systemPrompt  String   @map("system_prompt")
+  avatar        String?
+  model         String
+  temperature   Float?
+  maxTokens     Int?     @map("max_tokens")
+  sortOrder     Int      @default(0) @map("sort_order")
+  isBuiltIn     Boolean  @default(false) @map("is_built_in")
+  isActive      Boolean  @default(true) @map("is_active")
+  userId        String   @map("user_id")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  user          User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  conversations AiConversation[]
+
+  @@index([userId])
+  @@map("ai_assistants")
+}
+
+// AI对话表
+model AiConversation {
+  id          String   @id @default(cuid())
+  title       String?
+  userId      String   @map("user_id")
+  noteId      String?  @map("note_id")
+  assistantId String?  @map("assistant_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  note      Note?         @relation(fields: [noteId], references: [id], onDelete: SetNull)
+  assistant AiAssistant?  @relation(fields: [assistantId], references: [id], onDelete: SetNull)
+  messages  AiMessage[]
+
+  @@index([userId])
+  @@index([noteId])
+  @@map("ai_conversations")
+}
+
+// AI消息表
+model AiMessage {
+  id             String   @id @default(cuid())
+  conversationId String   @map("conversation_id")
+  role           String   // user, assistant, system
+  content        String   @db.Text
+  tokensUsed     Int?     @map("tokens_used")
+  model          String?
+  metadata       Json?    // 额外的元数据
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  conversation AiConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId])
+  @@index([conversationId, createdAt])
+  @@map("ai_messages")
+}
+
+// 模型配置表
+model ModelConfig {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  apiKey      String   @map("api_key")
+  apiEndpoint String   @map("api_endpoint")
+  apiType     String   @default("openai") @map("api_type") // openai, anthropic, ollama, lmstudio, glm
+  model       String
+  temperature Float    @default(0.7)
+  maxTokens   Int      @default(2000) @map("max_tokens")
+  topP        Float    @default(0.9) @map("top_p")
+  enabled     Boolean  @default(false)
+  isDefault   Boolean  @default(false) @map("is_default")
+  userId      String   @map("user_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  user     User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  usageLogs ModelUsageLog[]
+
+  @@index([userId])
+  @@map("model_configs")
+}
+
+// 模型使用日志表
+model ModelUsageLog {
+  id           String   @id @default(cuid())
+  modelId      String   @map("model_id")
+  action       String   // chat, completion, embedding
+  inputTokens  Int      @default(0) @map("input_tokens")
+  outputTokens Int      @default(0) @map("output_tokens")
+  totalTokens  Int      @default(0) @map("total_tokens")
+  success      Boolean
+  errorMessage String?  @map("error_message")
+  metadata     Json?    // 额外的元数据
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  model ModelConfig @relation(fields: [modelId], references: [id], onDelete: Cascade)
+
+  @@index([modelId])
+  @@index([createdAt])
+  @@map("model_usage_logs")
+}
