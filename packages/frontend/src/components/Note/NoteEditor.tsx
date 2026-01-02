@@ -614,6 +614,8 @@ function NoteEditor({ noteId }: NoteEditorProps) {
               const acceptMap: Record<NoteFileType, string> = {
                 [NoteFileType.MARKDOWN]: ".md,.markdown,.txt",
                 [NoteFileType.RICH_TEXT]: ".txt,.html",
+                [NoteFileType.MONACO]:
+                  ".js,.ts,.jsx,.tsx,.py,.java,.cpp,.c,.go,.rs,.php,.sql,.yaml,.xml,.json",
                 [NoteFileType.DRAWIO]: ".drawio,.xml",
                 [NoteFileType.MINDMAP]: ".json,.md",
               };

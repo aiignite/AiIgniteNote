@@ -4,6 +4,7 @@ import {
   FileTextOutlined,
   ApartmentOutlined,
   NodeIndexOutlined,
+  CodeOutlined,
 } from "@ant-design/icons";
 import type { EditorConfig } from "./BaseEditor";
 
@@ -12,6 +13,7 @@ import MarkdownEditor from "./MarkdownEditor";
 import RichTextEditor from "./RichTextEditor";
 import DrawIOEditor from "./DrawIOEditor";
 import MindMapEditor from "./MindMapEditor";
+import MonacoEditor from "./MonacoEditor";
 
 // 编辑器配置注册表
 export const EDITOR_REGISTRY: EditorConfig[] = [
@@ -45,6 +47,14 @@ export const EDITOR_REGISTRY: EditorConfig[] = [
     icon: <NodeIndexOutlined />,
     description: "思维导图编辑",
     component: MindMapEditor,
+    supportedActions: ["download", "upload", "fullscreen"],
+  },
+  {
+    type: NoteFileType.MONACO,
+    name: "代码编辑器",
+    icon: <CodeOutlined />,
+    description: "Monaco 代码编辑器，支持多种编程语言",
+    component: MonacoEditor,
     supportedActions: ["download", "upload", "fullscreen"],
   },
 ];

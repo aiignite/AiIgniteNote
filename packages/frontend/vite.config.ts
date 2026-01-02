@@ -5,7 +5,8 @@ import { resolve, extname } from "path";
 
 // 自定义插件：提供 DrawIO 文件访问
 function drawIOPlugin() {
-  const drawioPath = resolve(__dirname, "../../node_modules/drawio");
+  // 使用 public 文件夹中的 drawio，而不是 node_modules
+  const drawioPath = resolve(__dirname, "public/drawio");
 
   return {
     name: "drawio-middleware",
@@ -74,5 +75,6 @@ export default defineConfig({
     },
   },
   assetsInclude: ["**/*.html"],
-  publicDir: false,
+  // 启用 publicDir，这样 public/drawio 文件夹会被 Vite 自动处理
+  publicDir: "public",
 });

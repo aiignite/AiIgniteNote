@@ -1,16 +1,7 @@
-import { Button, Tooltip, Switch, Dropdown, Avatar } from "antd";
+import { Button, Dropdown, Avatar } from "antd";
 import type { MenuProps } from "antd";
-import {
-  SunOutlined,
-  MoonOutlined,
-  QuestionCircleOutlined,
-  SettingOutlined,
-  RobotOutlined,
-  UserOutlined,
-  LogoutOutlined,
-} from "@ant-design/icons";
+import { RobotOutlined, UserOutlined, LogoutOutlined } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
-import { useSettingsStore } from "../../store/settingsStore";
 import { useAuthStore } from "../../store/authStore";
 import dayjs from "dayjs";
 import styled, { css } from "styled-components";
@@ -99,21 +90,6 @@ const ActionButton = styled(Button)<{ $active?: boolean }>`
     `}
 `;
 
-const IconButton = styled(Button)`
-  width: 36px;
-  height: 36px;
-  padding: 0;
-  border-radius: ${BORDER.radius.sm};
-  border-color: transparent;
-  color: ${COLORS.inkMuted};
-  transition: all ${TRANSITION.fast};
-
-  &:hover {
-    background: ${COLORS.subtleLight};
-    color: ${COLORS.ink};
-  }
-`;
-
 const AIButton = styled(ActionButton)<{ $active: boolean }>`
   background: ${(props) => (props.$active ? COLORS.ink : "transparent")};
   border-color: ${(props) => (props.$active ? COLORS.ink : COLORS.subtle)};
@@ -124,16 +100,6 @@ const AIButton = styled(ActionButton)<{ $active: boolean }>`
       props.$active ? COLORS.accent : COLORS.subtleLight};
     border-color: ${(props) => (props.$active ? COLORS.accent : COLORS.ink)};
     color: ${(props) => (props.$active ? COLORS.paper : COLORS.ink)};
-  }
-`;
-
-const ThemeSwitch = styled(Switch)`
-  &.ant-switch {
-    background: ${COLORS.subtleLight};
-  }
-
-  &.ant-switch-checked {
-    background: ${COLORS.ink};
   }
 `;
 
@@ -181,18 +147,7 @@ interface HeaderProps {
 
 function Header({ toggleAIAssistant, aiAssistantVisible }: HeaderProps) {
   const navigate = useNavigate();
-  const { settings, setTheme } = useSettingsStore();
   const { user, logout } = useAuthStore();
-
-  // 切换主题
-  const handleToggleTheme = (checked: boolean) => {
-    setTheme(checked ? "dark" : "light");
-  };
-
-  // 打开设置
-  const handleOpenSettings = () => {
-    navigate("/settings");
-  };
 
   // 退出登录
   const handleLogout = async () => {
@@ -229,12 +184,6 @@ function Header({ toggleAIAssistant, aiAssistantVisible }: HeaderProps) {
     },
     { type: "divider" },
     {
-      key: "settings",
-      icon: <SettingOutlined />,
-      label: "设置",
-      onClick: handleOpenSettings,
-    },
-    {
       key: "logout",
       icon: <LogoutOutlined />,
       label: "退出登录",
@@ -269,32 +218,6 @@ function Header({ toggleAIAssistant, aiAssistantVisible }: HeaderProps) {
         >
           AI助手
         </AIButton>
-
-        <Divider />
-
-        {/* 主题切换 */}
-        <Tooltip
-          title={
-            settings.theme === "dark" ? "切换到亮色模式" : "切换到暗色模式"
-          }
-        >
-          <ThemeSwitch
-            checked={settings.theme === "dark"}
-            onChange={handleToggleTheme}
-            checkedChildren={<MoonOutlined />}
-            unCheckedChildren={<SunOutlined />}
-          />
-        </Tooltip>
-
-        {/* 设置按钮 */}
-        <Tooltip title="设置">
-          <IconButton icon={<SettingOutlined />} onClick={handleOpenSettings} />
-        </Tooltip>
-
-        {/* 帮助按钮 */}
-        <Tooltip title="帮助">
-          <IconButton icon={<QuestionCircleOutlined />} />
-        </Tooltip>
 
         <Divider />
 

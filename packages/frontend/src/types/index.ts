@@ -19,6 +19,13 @@ export interface NoteMetadata {
     | "timeline"
     | "verticalTimeline";
   customConfig?: Record<string, any>;
+  // Monaco 编辑器相关配置
+  monacoLanguage?: string;
+  monacoTheme?: string;
+  monacoFontSize?: number;
+  monacoMinimap?: boolean;
+  monacoLineNumbers?: string;
+  monacoWordWrap?: string;
 }
 
 // NoteVersion 类型定义

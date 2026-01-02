@@ -188,6 +188,29 @@ export class AiNoteDatabase extends Dexie {
         // 标签功能不需要数据迁移
         console.log("Database upgraded to version 4: Tags support added");
       });
+
+    // 数据库版本 5：添加离线同步标记支持
+    this.version(5)
+      .stores({
+        notes:
+          "id, title, category, fileType, isDeleted, isFavorite, createdAt, updatedAt, pendingSync",
+        noteVersions: "id, noteId, createdAt",
+        categories: "id, name, createdAt, _pendingSync",
+        conversations: "id, noteId, createdAt, updatedAt",
+        modelConfigs: "id, name, enabled, _pendingSync",
+        usageLogs: "id, modelId, timestamp",
+        attachments: "id, noteId, name, createdAt",
+        fileAttachments: "id, noteId, fileType, createdAt",
+        aiAssistants: "id, isBuiltIn, isActive, sortOrder",
+        tags: "id, name, createdAt, _pendingSync",
+        noteTags: "id, noteId, tagId, createdAt",
+      })
+      .upgrade(async () => {
+        // 离线同步功能不需要数据迁移
+        console.log(
+          "Database upgraded to version 5: Offline sync support added",
+        );
+      });
   }
 
   // ============================================
@@ -265,22 +288,6 @@ export class AiNoteDatabase extends Dexie {
     }
 
     return tags;
-  }
-
-  async setNoteTags(noteId: string, tagIds: string[]): Promise<void> {
-    // 删除现有的标签关联
-    await this.noteTags.where("noteId").equals(noteId).delete();
-
-    // 创建新的标签关联
-    for (const tagId of tagIds) {
-      const id = `notetag_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-      await this.noteTags.add({
-        id,
-        noteId,
-        tagId,
-        createdAt: Date.now(),
-      });
-    }
   }
 
   async getNotesByTagId(tagId: string): Promise<Note[]> {
@@ -604,7 +611,9 @@ export class AiNoteDatabase extends Dexie {
   }
 
   async getActiveAssistants(): Promise<LocalAIAssistant[]> {
-    return await this.aiAssistants.where("isActive").equals(true).toArray();
+    return await this.aiAssistants
+      .filter((assistant) => assistant.isActive === true)
+      .toArray();
   }
 }
 

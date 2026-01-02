@@ -57,7 +57,7 @@ export const useModelStore = create<ModelStore>((set, get) => ({
 
       // 删除本地不存在于远程的配置
       const localConfigs = await db.modelConfigs.toArray();
-      const remoteIds = new Set(remoteConfigs.map((c) => c.id));
+      const remoteIds = new Set(remoteConfigs.map((c: any) => c.id));
       for (const localConfig of localConfigs) {
         if (!remoteIds.has(localConfig.id)) {
           await db.modelConfigs.delete(localConfig.id);
@@ -103,7 +103,6 @@ export const useModelStore = create<ModelStore>((set, get) => ({
         description: configData.description,
         apiKey: configData.apiKey || "",
         apiEndpoint: configData.apiEndpoint,
-        apiType: configData.apiType || "openai",
         model: configData.model,
         temperature: configData.temperature,
         maxTokens: configData.maxTokens,

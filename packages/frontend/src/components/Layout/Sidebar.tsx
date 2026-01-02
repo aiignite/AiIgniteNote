@@ -12,6 +12,9 @@ import {
   SettingOutlined,
   FolderOutlined,
   TagsOutlined,
+  MenuFoldOutlined,
+  MenuUnfoldOutlined,
+  CodeOutlined,
 } from "@ant-design/icons";
 import type { MenuProps } from "antd";
 import { useNavigate, useLocation } from "react-router-dom";
@@ -374,9 +377,10 @@ function Sidebar({ collapsed, onCollapse }: SidebarProps) {
     fileType: NoteFileType = NoteFileType.MARKDOWN,
   ) => {
     try {
-      const titles = {
+      const titles: Record<NoteFileType, string> = {
         [NoteFileType.MARKDOWN]: "新建 Markdown 笔记",
         [NoteFileType.RICH_TEXT]: "新建富文本笔记",
+        [NoteFileType.MONACO]: "新建代码笔记",
         [NoteFileType.DRAWIO]: "新建 DrawIO 图表",
         [NoteFileType.MINDMAP]: "新建思维导图",
       };
@@ -410,6 +414,12 @@ function Sidebar({ collapsed, onCollapse }: SidebarProps) {
       label: "富文本笔记",
       icon: <FileTextOutlined />,
       onClick: () => handleCreateNote(NoteFileType.RICH_TEXT),
+    },
+    {
+      key: "monaco",
+      label: "代码笔记",
+      icon: <CodeOutlined />,
+      onClick: () => handleCreateNote(NoteFileType.MONACO),
     },
     {
       key: "drawio",
@@ -583,7 +593,7 @@ function Sidebar({ collapsed, onCollapse }: SidebarProps) {
       {/* 折叠按钮 */}
       <BottomSection>
         <CollapseButton onClick={() => onCollapse(!collapsed)}>
-          {collapsed ? "展开" : "收起"}
+          {collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
         </CollapseButton>
       </BottomSection>
     </SidebarContainer>

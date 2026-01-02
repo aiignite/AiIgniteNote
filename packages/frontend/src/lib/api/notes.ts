@@ -71,4 +71,26 @@ export const notesApi = {
 
   // Permanent delete note
   permanentDeleteNote: (id: string) => apiClient.delete(`/notes/deleted/${id}`),
+
+  // Categories
+  getCategories: () => apiClient.get("/categories"),
+
+  createCategory: (data: {
+    name: string;
+    icon?: string;
+    color?: string;
+    sortOrder?: number;
+  }) => apiClient.post("/categories", data),
+
+  updateCategory: (
+    id: string,
+    data: {
+      name?: string;
+      icon?: string;
+      color?: string;
+      sortOrder?: number;
+    },
+  ) => apiClient.put(`/categories/${id}`, data),
+
+  deleteCategory: (id: string) => apiClient.delete(`/categories/${id}`),
 };

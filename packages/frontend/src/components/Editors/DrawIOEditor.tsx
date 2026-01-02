@@ -73,8 +73,9 @@ function DrawIOEditor({
   const [isLoading, setIsLoading] = useState(true);
   const currentXmlRef = useRef<string>("");
 
-  // 使用本地 DrawIO 编辑器
-  const DRAWIO_URL = "/drawio/index.html?embed=1&ui=minimal&spin=1&proto=json";
+  // 使用本地 DrawIO 编辑器，设置语言为简体中文
+  const DRAWIO_URL =
+    "/drawio/index.html?embed=1&ui=minimal&spin=1&proto=json&lang=zh";
 
   // 初始化 DrawIO 数据
   const initialXml = metadata?.drawioData || content || getEmptyDrawIOXml();

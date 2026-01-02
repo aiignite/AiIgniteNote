@@ -7,6 +7,7 @@ export enum NoteFileType {
   RICH_TEXT = "richtext",
   DRAWIO = "drawio",
   MINDMAP = "mindmap",
+  MONACO = "monaco",
 }
 
 // AI 助手配置（本地存储）
@@ -67,6 +68,21 @@ export interface LocalCategory {
   color?: string;
   createdAt: number;
   sortOrder?: number;
+  // 同步相关字段（仅本地使用）
+  _pendingSync?: boolean;
+  _deleted?: boolean;
+}
+
+// IndexedDB 本地存储的 Tag 类型
+export interface LocalTag {
+  id: string;
+  name: string;
+  color?: string;
+  createdAt: number;
+  updatedAt: number;
+  // 同步相关字段（仅本地使用）
+  _pendingSync?: boolean;
+  _deleted?: boolean;
 }
 
 // 从服务端 Note 转换为本地 Note
