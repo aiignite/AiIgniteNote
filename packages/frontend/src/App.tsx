@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect } from "react";
+import { Suspense, lazy, useEffect, useRef } from "react";
 import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { Spin } from "antd";
 import MainLayout from "./components/Layout/MainLayout";
@@ -7,7 +7,6 @@ import LoginPage from "./pages/LoginPage";
 
 // 懒加载页面组件
 const NotePage = lazy(() => import("./pages/NotePage"));
-const ModelManagementPage = lazy(() => import("./pages/ModelManagementPage"));
 const RecycleBinPage = lazy(() => import("./pages/RecycleBinPage"));
 const SettingsPage = lazy(() => import("./pages/SettingsPage"));
 
@@ -40,15 +39,8 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 }
 
 function App() {
-  const { token, refreshUser } = useAuthStore();
+  const { token, isAuthenticated } = useAuthStore();
   const location = useLocation();
-
-  useEffect(() => {
-    // 只有当有token且不在登录页面时，才尝试获取用户信息
-    if (token && location.pathname !== "/login") {
-      refreshUser();
-    }
-  }, [token, location.pathname, refreshUser]);
 
   return (
     <Suspense fallback={<PageLoader />}>
@@ -78,6 +70,7 @@ function App() {
           <Route index element={<NotePage />} />
           <Route path="favorites" element={<NotePage />} />
           <Route path="category/:categoryId" element={<NotePage />} />
+          <Route path="tag/:tagId" element={<NotePage />} />
           <Route path=":noteId" element={<NotePage />} />
         </Route>
 

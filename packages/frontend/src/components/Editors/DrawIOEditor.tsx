@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-import { Button, message, Spin, Input } from "antd";
+import { Spin, Input } from "antd";
 import styled from "styled-components";
 import { TYPOGRAPHY } from "../../styles/design-tokens";
 import type { EditorProps } from "./BaseEditor";
@@ -61,16 +61,6 @@ function getEmptyDrawIOXml(): string {
 </mxGraphModel>`;
 }
 
-// Base64 转 Blob
-function base64ToBlob(base64: string, mimeType: string): Blob {
-  const bytes = atob(base64);
-  const arr = new Uint8Array(bytes.length);
-  for (let i = 0; i < bytes.length; i++) {
-    arr[i] = bytes.charCodeAt(i);
-  }
-  return new Blob([arr], { type: mimeType });
-}
-
 function DrawIOEditor({
   title,
   content,
@@ -80,7 +70,6 @@ function DrawIOEditor({
   onSave,
 }: EditorProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
-  const [isReady, setIsReady] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const currentXmlRef = useRef<string>("");
 
@@ -114,7 +103,6 @@ function DrawIOEditor({
           console.log("[DrawIO] Received ready, initializing...");
           hasInitialized = true;
           setIsLoading(false);
-          setIsReady(true);
           // 发送初始化数据
           setTimeout(() => {
             iframeRef.current?.contentWindow?.postMessage(
@@ -147,7 +135,6 @@ function DrawIOEditor({
           console.log("[DrawIO] Init event");
           hasInitialized = true;
           setIsLoading(false);
-          setIsReady(true);
           // 发送初始化数据
           setTimeout(() => {
             iframeRef.current?.contentWindow?.postMessage(
@@ -165,7 +152,6 @@ function DrawIOEditor({
         case "load":
           console.log("[DrawIO] Load event");
           setIsLoading(false);
-          setIsReady(true);
           break;
 
         case "save":
@@ -205,7 +191,6 @@ function DrawIOEditor({
       if (!hasInitialized) {
         console.warn("[DrawIO] Init timeout, forcing ready");
         setIsLoading(false);
-        setIsReady(true);
       }
     }, 5000);
 

@@ -186,7 +186,6 @@ function VersionHistory({
             </Tooltip>
           </Space>
           <span>V{index + 1}</span>
-          <span>{version.title}</span>
         </VersionMeta>
 
         <VersionContent>

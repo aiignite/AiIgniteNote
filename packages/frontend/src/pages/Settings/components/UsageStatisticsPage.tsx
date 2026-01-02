@@ -143,7 +143,7 @@ interface ModelStats {
 // Main Component
 // ============================================
 
-export default function ModelsUsage() {
+export default function UsageStatisticsPage() {
   const [loading, setLoading] = useState(false);
   const [stats, setStats] = useState<ModelStats[]>([]);
   const [logs, setLogs] = useState<UsageLog[]>([]);

@@ -8,11 +8,12 @@ import {
   Input as AntInput,
   Space,
   Dropdown,
+  Select,
+  Empty,
 } from "antd";
 import {
   SaveOutlined,
   PlusOutlined,
-  DeleteOutlined,
   TagsOutlined,
   EditOutlined,
   DownloadOutlined,
@@ -24,6 +25,7 @@ import {
 } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
 import { useNoteStore } from "../../store/noteStore";
+import { useTagStore } from "../../store/tagStore";
 import { useAutoSave } from "../../hooks/useAutoSave";
 import { db } from "../../db";
 import { NoteFileType, NoteMetadata } from "../../types";
@@ -63,15 +65,24 @@ const pulse = keyframes`
 // Styled Components
 // ============================================
 
-const EditorContainer = styled.div`
+const EditorContainer = styled.div<{ $fullscreen?: boolean }>`
   height: 100%;
   display: flex;
   flex-direction: column;
   background: ${COLORS.background};
   position: relative;
+
+  ${(props) =>
+    props.$fullscreen
+      ? `
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    `
+      : ""}
 `;
 
-const EditorHeader = styled.div`
+const EditorHeader = styled.div<{ $fullscreen?: boolean }>`
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -271,15 +282,6 @@ const CreateButton = styled(Button)`
   }
 `;
 
-const TimeStamp = styled.div`
-  font-size: ${TYPOGRAPHY.fontSize.xs};
-  color: ${COLORS.inkMuted};
-  display: flex;
-  align-items: center;
-  gap: ${SPACING.xs};
-  font-family: ${TYPOGRAPHY.fontFamily.mono};
-`;
-
 const EditorControls = styled.div`
   display: flex;
   align-items: center;
@@ -292,27 +294,25 @@ const EditorControls = styled.div`
 
 interface NoteEditorProps {
   noteId?: string;
-  onBack?: () => void;
 }
 
 // 预览模式类型
 type PreviewMode = "edit" | "live" | "preview";
 
-function NoteEditor({ noteId, onBack }: NoteEditorProps) {
+function NoteEditor({ noteId }: NoteEditorProps) {
   const navigate = useNavigate();
   const { message } = App.useApp();
-  const { currentNote, setCurrentNote, updateNote, deleteNote, createNote } =
+  const { currentNote, setCurrentNote, updateNote, createNote } =
     useNoteStore();
+  const { tags: allTags, loadTags } = useTagStore();
 
   // 状态管理
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [metadata, setMetadata] = useState<NoteMetadata | undefined>();
-  const [tags, setTags] = useState<string[]>([]);
+  const [tagIds, setTagIds] = useState<string[]>([]); // 改为存储标签ID
   const [saving, setSaving] = useState(false);
   const [tagModalVisible, setTagModalVisible] = useState(false);
-  const [newTag, setNewTag] = useState("");
-  const [lastSaveTime, setLastSaveTime] = useState<Date | null>(null);
 
   // 当前文件类型状态
   const [fileType, setFileType] = useState<NoteFileType>(NoteFileType.MARKDOWN);
@@ -324,6 +324,9 @@ function NoteEditor({ noteId, onBack }: NoteEditorProps) {
   // 初始化编辑器
   useEffect(() => {
     const loadNote = async () => {
+      // 加载所有标签
+      await loadTags();
+
       if (noteId) {
         try {
           const note = await db.notes.get(noteId);
@@ -331,11 +334,10 @@ function NoteEditor({ noteId, onBack }: NoteEditorProps) {
             setCurrentNote(note);
             setTitle(note.title);
             setContent(note.content || "");
-            setTags(note.tags || []);
+            // 从 noteTags 表加载标签关联
+            const noteTags = await db.getNoteTags(noteId);
+            setTagIds(noteTags.map((t) => t.id));
             setMetadata(note.metadata);
-            setLastSaveTime(
-              note.updatedAt ? new Date(note.updatedAt) : new Date(),
-            );
             // 兼容旧数据：没有 fileType 的默认为 markdown
             setFileType(note.fileType || NoteFileType.MARKDOWN);
           }
@@ -346,33 +348,39 @@ function NoteEditor({ noteId, onBack }: NoteEditorProps) {
         setCurrentNote(null);
         setTitle("");
         setContent("");
-        setTags([]);
+        setTagIds([]);
         setMetadata(undefined);
         setFileType(NoteFileType.MARKDOWN);
-        setLastSaveTime(null);
       }
     };
     loadNote();
-  }, [noteId, setCurrentNote]);
+  }, [noteId, setCurrentNote, loadTags]);
 
   // 自动保存
   const { saveStatus, manualSave } = useAutoSave({
     noteId,
     title,
     content,
-    tags,
+    tagIds,
     onSave: async () => {
       if (!noteId) return;
       setSaving(true);
       try {
+        // 保存标签关联到 IndexedDB
+        await db.setNoteTags(noteId, tagIds);
+
+        // 同时更新 notes 表的 tags 数组（保持兼容性）
+        const tagNames = allTags
+          .filter((t) => tagIds.includes(t.id))
+          .map((t) => t.name);
+
         await updateNote(noteId, {
           title,
           content,
-          tags,
+          tags: tagNames,
           fileType,
           metadata,
         });
-        setLastSaveTime(new Date());
       } catch (error) {
         console.error("Save failed:", error);
       }
@@ -417,38 +425,16 @@ function NoteEditor({ noteId, onBack }: NoteEditorProps) {
     }
   };
 
-  // 删除笔记
-  const handleDeleteNote = async () => {
-    if (!noteId) return;
-
-    Modal.confirm({
-      title: "确认删除",
-      content: "确定要删除这篇笔记吗？删除后可以到回收站恢复。",
-      okText: "确定",
-      cancelText: "取消",
-      onOk: async () => {
-        try {
-          await deleteNote(noteId);
-          message.success("删除成功");
-          navigate("/notes");
-        } catch (error) {
-          message.error("删除失败");
-        }
-      },
-    });
-  };
-
   // 添加标签
-  const handleAddTag = () => {
-    if (newTag.trim() && !tags.includes(newTag.trim())) {
-      setTags([...tags, newTag.trim()]);
-      setNewTag("");
+  const handleAddTag = (tagId: string) => {
+    if (!tagIds.includes(tagId)) {
+      setTagIds([...tagIds, tagId]);
     }
   };
 
   // 删除标签
-  const handleRemoveTag = (tagToRemove: string) => {
-    setTags(tags.filter((tag) => tag !== tagToRemove));
+  const handleRemoveTag = (tagIdToRemove: string) => {
+    setTagIds(tagIds.filter((id) => id !== tagIdToRemove));
   };
 
   // 导入功能
@@ -506,25 +492,13 @@ function NoteEditor({ noteId, onBack }: NoteEditorProps) {
     [content, title, message],
   );
 
-  // 格式化最后保存时间
-  const formatLastSave = (date: Date) => {
-    const now = new Date();
-    const diff = now.getTime() - date.getTime();
-    if (diff < 60000) return "刚刚";
-    if (diff < 3600000) return `${Math.floor(diff / 60000)}分钟前`;
-    return date.toLocaleTimeString("zh-CN", {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  };
-
   // 获取当前编辑器配置
   const currentEditorConfig = getEditorConfig(fileType);
   const EditorComponent = currentEditorConfig?.component;
 
   if (!currentNote && !noteId) {
     return (
-      <EditorContainer>
+      <EditorContainer $fullscreen={isFullscreen}>
         <EmptyState>
           <EmptyIcon>
             <EditOutlined />
@@ -561,21 +535,25 @@ function NoteEditor({ noteId, onBack }: NoteEditorProps) {
   };
 
   return (
-    <EditorContainer>
+    <EditorContainer $fullscreen={isFullscreen}>
       {/* 编辑器头部 */}
-      <EditorHeader>
+      <EditorHeader $fullscreen={isFullscreen}>
         <HeaderLeft>
           <TagContainer>
-            {tags.slice(0, 3).map((tag) => (
-              <StyledTag
-                key={tag}
-                closable
-                onClose={() => handleRemoveTag(tag)}
-              >
-                {tag}
-              </StyledTag>
-            ))}
-            {tags.length > 3 && <StyledTag>+{tags.length - 3}</StyledTag>}
+            {allTags
+              .filter((tag) => tagIds.includes(tag.id))
+              .slice(0, 3)
+              .map((tag) => (
+                <StyledTag
+                  key={tag.id}
+                  color={tag.color}
+                  closable
+                  onClose={() => handleRemoveTag(tag.id)}
+                >
+                  {tag.name}
+                </StyledTag>
+              ))}
+            {tagIds.length > 3 && <StyledTag>+{tagIds.length - 3}</StyledTag>}
             <Tooltip title="添加标签">
               <AddTagButton
                 icon={<TagsOutlined />}
@@ -635,7 +613,7 @@ function NoteEditor({ noteId, onBack }: NoteEditorProps) {
               input.type = "file";
               const acceptMap: Record<NoteFileType, string> = {
                 [NoteFileType.MARKDOWN]: ".md,.markdown,.txt",
-                [NoteFileType.RICHTEXT]: ".txt,.html",
+                [NoteFileType.RICH_TEXT]: ".txt,.html",
                 [NoteFileType.DRAWIO]: ".drawio,.xml",
                 [NoteFileType.MINDMAP]: ".json,.md",
               };
@@ -671,13 +649,6 @@ function NoteEditor({ noteId, onBack }: NoteEditorProps) {
           >
             保存
           </ActionButton>
-          <ActionButton
-            danger
-            icon={<DeleteOutlined />}
-            onClick={handleDeleteNote}
-          >
-            删除
-          </ActionButton>
         </HeaderRight>
       </EditorHeader>
 
@@ -711,26 +682,63 @@ function NoteEditor({ noteId, onBack }: NoteEditorProps) {
         onOk={() => setTagModalVisible(false)}
         okText="确定"
         cancelText="取消"
+        width={500}
       >
-        <Space.Compact style={{ width: "100%" }}>
-          <AntInput
-            placeholder="输入标签名称"
-            value={newTag}
-            onChange={(e) => setNewTag(e.target.value)}
-            onPressEnter={handleAddTag}
+        <div style={{ marginBottom: 16 }}>
+          <Select
+            mode="multiple"
+            style={{ width: "100%" }}
+            placeholder="选择要添加的标签"
+            value={tagIds}
+            onChange={setTagIds}
+            options={allTags.map((tag) => ({
+              label: (
+                <Tag color={tag.color} style={{ margin: 0 }}>
+                  {tag.name}
+                </Tag>
+              ),
+              value: tag.id,
+            }))}
+            filterOption={(input, option) =>
+              (option?.label as any)?.props?.children
+                ?.toLowerCase()
+                .includes(input.toLowerCase())
+            }
           />
-          <Button type="primary" onClick={handleAddTag}>
-            添加
-          </Button>
-        </Space.Compact>
+        </div>
         <div
-          style={{ marginTop: 16, display: "flex", flexWrap: "wrap", gap: 8 }}
+          style={{
+            padding: 16,
+            background: COLORS.background,
+            borderRadius: BORDER.radius.sm,
+            minHeight: 80,
+          }}
         >
-          {tags.map((tag) => (
-            <StyledTag key={tag} closable onClose={() => handleRemoveTag(tag)}>
-              {tag}
-            </StyledTag>
-          ))}
+          {tagIds.length === 0 ? (
+            <Empty
+              description="暂无标签"
+              image={Empty.PRESENTED_IMAGE_SIMPLE}
+            />
+          ) : (
+            <Space wrap>
+              {allTags
+                .filter((tag) => tagIds.includes(tag.id))
+                .map((tag) => (
+                  <Tag
+                    key={tag.id}
+                    color={tag.color}
+                    closable
+                    onClose={() => handleRemoveTag(tag.id)}
+                    style={{ marginBottom: 8 }}
+                  >
+                    {tag.name}
+                  </Tag>
+                ))}
+            </Space>
+          )}
+        </div>
+        <div style={{ marginTop: 12, fontSize: 12, color: COLORS.inkMuted }}>
+          💡 提示：您可以在"设置 → 标签管理"中创建新标签
         </div>
       </Modal>
     </EditorContainer>

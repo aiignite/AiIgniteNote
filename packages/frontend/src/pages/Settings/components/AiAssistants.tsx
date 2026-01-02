@@ -34,7 +34,8 @@ import {
   SHADOW,
   TRANSITION,
 } from "../../../styles/design-tokens";
-import { BUILT_IN_ASSISTANTS } from "../../../store/aiStore";
+import { useAIStore } from "../../../store/aiStore";
+import { useModelStore } from "../../../store/modelStore";
 
 // ============================================
 // 动画
@@ -261,7 +262,7 @@ interface AIAssistant {
 // Main Component
 // ============================================
 
-export default function AIAssistantsSettings() {
+export default function AiAssistants() {
   const [assistants, setAssistants] = useState<AIAssistant[]>([]);
   const [loading, setLoading] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
@@ -271,28 +272,27 @@ export default function AIAssistantsSettings() {
   const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [form] = Form.useForm();
   const { message } = App.useApp();
+  const { configs } = useModelStore();
+  const {
+    assistants: dbAssistants,
+    loadAssistants,
+    createAssistant,
+    updateAssistant,
+    deleteAssistant,
+  } = useAIStore();
 
   useEffect(() => {
-    loadAssistants();
-  }, []);
+    loadAssistantsData();
+  }, [loadAssistants]);
 
-  const loadAssistants = async () => {
+  const loadAssistantsData = async () => {
     setLoading(true);
     try {
-      // 加载内置助手
-      const builtIn = BUILT_IN_ASSISTANTS;
-
-      // 加载自定义助手（从 IndexedDB）
-      try {
-        // 暂时不从数据库加载，因为没有 customAssistants 表
-        // TODO: 添加自定义助手存储功能
-      } catch (e) {
-        console.log("No custom assistants found");
-      }
-
-      setAssistants([...builtIn] as AIAssistant[]);
+      await loadAssistants();
+      const { assistants } = useAIStore.getState();
+      setAssistants(assistants);
     } catch (error) {
-      // message.error("加载助手列表失败");
+      console.error("加载助手列表失败:", error);
     } finally {
       setLoading(false);
     }
@@ -302,7 +302,7 @@ export default function AIAssistantsSettings() {
     setEditingAssistant(null);
     form.resetFields();
     form.setFieldsValue({
-      model: "default",
+      model: "",
       temperature: 0.7,
       maxTokens: 2000,
       isActive: true,
@@ -318,37 +318,53 @@ export default function AIAssistantsSettings() {
 
   const handleDelete = async (id: string) => {
     try {
-      // TODO: 从数据库删除自定义助手
-      // await db.customAssistants.delete(id);
-      setAssistants((prev) => prev.filter((a) => a.id !== id));
+      // 只能删除自定义助手
+      const assistant = assistants.find((a) => a.id === id);
+      if (assistant?.isBuiltIn) {
+        message.warning("内置助手不能删除");
+        return;
+      }
+
+      await deleteAssistant(id);
+      await loadAssistantsData();
       message.success("删除成功");
-    } catch (error) {
-      message.error("删除失败");
+    } catch (error: any) {
+      console.error("删除失败:", error);
+      message.error(error.message || "删除失败");
     }
   };
 
   const handleSubmit = async (values: any) => {
     setLoading(true);
     try {
-      const newAssistant: AIAssistant = {
-        id: editingAssistant?.id || `custom_${Date.now()}`,
-        ...values,
-        isBuiltIn: false,
+      const assistantData: Omit<AIAssistant, "id"> = {
+        name: values.name,
+        description: values.description,
+        systemPrompt: values.systemPrompt,
+        avatar: values.avatar,
+        model: values.model || "",
+        temperature: values.temperature,
+        maxTokens: values.maxTokens,
         isActive: values.isActive ?? true,
+        isBuiltIn: false,
       };
 
-      // TODO: 保存到 IndexedDB
-      // await db.customAssistants.put({...});
+      if (editingAssistant) {
+        // 更新现有助手
+        await updateAssistant(editingAssistant.id, assistantData);
+      } else {
+        // 创建新助手
+        await createAssistant(assistantData);
+      }
 
-      setAssistants((prev) => {
-        const filtered = prev.filter((a) => a.id !== newAssistant.id);
-        return [...filtered, newAssistant];
-      });
+      // 重新加载助手列表
+      await loadAssistantsData();
 
       message.success(editingAssistant ? "更新成功" : "创建成功");
       setModalVisible(false);
-    } catch (error) {
-      message.error("操作失败");
+    } catch (error: any) {
+      console.error("保存助手失败:", error);
+      message.error(error.message || "操作失败");
     } finally {
       setLoading(false);
     }
@@ -471,7 +487,7 @@ export default function AIAssistantsSettings() {
   return (
     <Container>
       <Header>
-        <h2>AI 助手管理</h2>
+        <h2>AI 助手</h2>
         <Space>
           <ViewToggle
             value={viewMode}
@@ -556,15 +572,17 @@ export default function AIAssistantsSettings() {
             label="使用模型"
             name="model"
             rules={[{ required: true, message: "请选择模型" }]}
-            initialValue="default"
+            initialValue=""
           >
-            <Select>
-              <Select.Option value="default">默认模型</Select.Option>
-              <Select.Option value="gpt-3.5-turbo">GPT-3.5 Turbo</Select.Option>
-              <Select.Option value="gpt-4">GPT-4</Select.Option>
-              <Select.Option value="claude-3-sonnet">
-                Claude 3 Sonnet
-              </Select.Option>
+            <Select placeholder="选择模型">
+              <Select.Option value="">默认模型</Select.Option>
+              {configs
+                .filter((c) => c.enabled)
+                .map((config) => (
+                  <Select.Option key={config.id} value={config.id}>
+                    {config.name} ({config.model})
+                  </Select.Option>
+                ))}
             </Select>
           </Form.Item>
 

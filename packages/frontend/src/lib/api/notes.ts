@@ -32,6 +32,7 @@ export const notesApi = {
       title?: string;
       content?: string;
       htmlContent?: string;
+      fileType?: string;
       categoryId?: string;
       tags?: string[];
       metadata?: any;

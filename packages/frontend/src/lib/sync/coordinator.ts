@@ -183,9 +183,9 @@ class SyncCoordinator {
   }
 
   private async clearPendingSync(
-    notes: Note[],
-    categories: Category[],
-    assistants: AiAssistant[],
+    _notes: Note[],
+    _categories: Category[],
+    _assistants: AiAssistant[],
   ) {
     // This would update IndexedDB to clear pendingSync flags
     // Implementation depends on your IndexedDB structure

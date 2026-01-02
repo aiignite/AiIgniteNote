@@ -48,6 +48,9 @@ await fastify.register(import("./routes/ai.routes.js"), {
 await fastify.register(import("./routes/models.routes.js"), {
   prefix: "/api/v1/models",
 });
+await fastify.register(import("./routes/tags.routes.js"), {
+  prefix: "/api/v1/tags",
+});
 await fastify.register(import("./routes/sync.routes.js"), {
   prefix: "/api/v1/sync",
 });

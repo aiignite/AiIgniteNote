@@ -20,12 +20,31 @@ export interface ChatResponse {
   };
 }
 
+// AI 助手相关类型
+export interface AIAssistant {
+  id: string;
+  name: string;
+  description?: string;
+  systemPrompt: string;
+  avatar?: string;
+  model: string;
+  temperature?: number;
+  maxTokens?: number;
+  isActive?: boolean;
+  isBuiltIn?: boolean;
+  sortOrder?: number;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
 export const aiApi = {
+  // ========== 聊天相关 ==========
+
   // 获取默认模型配置
   getDefaultModel: () => apiClient.get("/ai/models/default"),
 
   // 发送聊天消息（非流式）
-  chat: (data: ChatRequest) => apiClient.post<ChatResponse>("/ai/chat", data),
+  chat: (data: ChatRequest) => apiClient.post("/ai/chat", data),
 
   // 发送聊天消息（流式）
   chatStream: async (
@@ -103,4 +122,38 @@ export const aiApi = {
       throw error;
     }
   },
+
+  // ========== AI 助手相关 ==========
+
+  // 获取所有 AI 助手
+  getAssistants: () => apiClient.get("/ai/assistants"),
+
+  // 创建自定义助手
+  createAssistant: (data: {
+    name: string;
+    description?: string;
+    systemPrompt: string;
+    avatar?: string;
+    model: string;
+    temperature?: number;
+    maxTokens?: number;
+  }) => apiClient.post("/ai/assistants", data),
+
+  // 更新助手
+  updateAssistant: (
+    id: string,
+    data: {
+      name?: string;
+      description?: string;
+      systemPrompt?: string;
+      avatar?: string;
+      model?: string;
+      temperature?: number;
+      maxTokens?: number;
+      isActive?: boolean;
+    },
+  ) => apiClient.put(`/ai/assistants/${id}`, data),
+
+  // 删除助手
+  deleteAssistant: (id: string) => apiClient.delete(`/ai/assistants/${id}`),
 };

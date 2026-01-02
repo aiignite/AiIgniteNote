@@ -10,7 +10,14 @@ export interface NoteMetadata {
   drawioData?: string;
   drawioThumbnail?: string;
   mindmapData?: string;
-  mindmapLayout?: "mindmap" | "organization" | "tree";
+  mindmapLayout?:
+    | "mindMap"
+    | "logicalStructure"
+    | "organizationStructure"
+    | "catalogOrganization"
+    | "fishbone"
+    | "timeline"
+    | "verticalTimeline";
   customConfig?: Record<string, any>;
 }
 
@@ -31,7 +38,6 @@ export interface AIMessage {
   role: "user" | "assistant" | "system";
   content: string;
   timestamp: number;
-  actionType?: AIActionType; // 标记是否来自快捷操作
 }
 
 export interface AIConversation {
@@ -41,35 +47,32 @@ export interface AIConversation {
   title?: string;
   createdAt: number;
   updatedAt: number;
+  // 上下文摘要（压缩后的历史对话）
+  contextSummary?: string;
+  // 最近一次压缩的消息索引（之后的消息未被压缩）
+  lastCompressedMessageIndex?: number;
 }
-
-export type AIActionType =
-  | "generate" // 内容生成
-  | "rewrite" // 改写润色
-  | "summarize" // 摘要提取
-  | "keywords" // 关键词生成
-  | "expand" // 内容扩展
-  | "translate" // 翻译
-  | "fixGrammar" // 语法修正
-  | "custom"; // 自定义
 
 // 模型配置相关类型（本地扩展，用于 IndexedDB）
 export interface ModelConfig {
   id: string;
   name: string;
-  apiKey: string;
+  description?: string;
+  apiKey?: string;
   apiEndpoint: string;
+  apiType: string;
   model: string;
   temperature: number;
   maxTokens: number;
   topP: number;
   enabled: boolean;
+  isDefault: boolean;
 }
 
 export interface ModelUsageLog {
   id: string;
   modelId: string;
-  action: AIActionType;
+  action: string;
   inputTokens: number;
   outputTokens: number;
   timestamp: number;

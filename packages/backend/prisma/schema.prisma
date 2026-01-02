@@ -29,6 +29,7 @@ model User {
   modelConfigs     ModelConfig[]
   aiConversations  AiConversation[]
   refreshTokens    RefreshToken[]
+  tags             Tag[]
 
   @@map("users")
 }
@@ -92,6 +93,7 @@ model Note {
   versions     NoteVersion[]
   conversations AiConversation[]
   attachments   Attachment[]
+  noteTags     NoteTag[]
 
   @@index([userId])
   @@index([categoryId])
@@ -238,4 +240,40 @@ model ModelUsageLog {
   @@index([modelId])
   @@index([createdAt])
   @@map("model_usage_logs")
+}
+
+// 标签表
+model Tag {
+  id        String   @id @default(cuid())
+  name      String
+  color     String?
+  userId    String   @map("user_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // 关系
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  noteTags NoteTag[]
+
+  @@unique([userId, name])
+  @@index([userId])
+  @@index([name])
+  @@map("tags")
+}
+
+// 笔记-标签关联表（多对多关系）
+model NoteTag {
+  id        String   @id @default(cuid())
+  noteId    String   @map("note_id")
+  tagId     String   @map("tag_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // 关系
+  note Note @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  tag  Tag  @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@unique([noteId, tagId])
+  @@index([noteId])
+  @@index([tagId])
+  @@map("note_tags")
 }

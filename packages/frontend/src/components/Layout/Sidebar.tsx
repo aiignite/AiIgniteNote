@@ -1,23 +1,23 @@
-import { useState } from "react";
-import { Input, Button, Dropdown, message, Divider, Tooltip } from "antd";
+import { useState, useEffect } from "react";
+import { Input, Button, Dropdown, message, Divider, Tooltip, Tag } from "antd";
 import {
   FileTextOutlined,
   StarOutlined,
   DeleteOutlined,
   SearchOutlined,
   PlusOutlined,
-  FolderAddOutlined,
   FileMarkdownOutlined,
   ApartmentOutlined,
   NodeIndexOutlined,
   SettingOutlined,
   FolderOutlined,
+  TagsOutlined,
 } from "@ant-design/icons";
 import type { MenuProps } from "antd";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useNoteStore } from "../../store/noteStore";
+import { useTagStore } from "../../store/tagStore";
 import { NoteFileType } from "../../types";
-import CategoryManager from "../Note/CategoryManager";
 import styled, { css } from "styled-components";
 import {
   COLORS,
@@ -94,6 +94,7 @@ const ActionSection = styled.div<{ $collapsed: boolean }>`
 
 const CreateButton = styled(Button)<{ $collapsed: boolean }>`
   height: 40px;
+  width: ${(props) => (props.$collapsed ? "40px" : "100%")};
   background: ${COLORS.ink};
   border-color: ${COLORS.ink};
   border-radius: ${BORDER.radius.sm};
@@ -308,11 +309,16 @@ function Sidebar({ collapsed, onCollapse }: SidebarProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const { categories, createNote, updateNote } = useNoteStore();
+  const { tags, loadTags } = useTagStore();
   const [searchValue, setSearchValue] = useState("");
-  const [categoryManagerVisible, setCategoryManagerVisible] = useState(false);
   const [dragOverCategoryId, setDragOverCategoryId] = useState<string | null>(
     null,
   );
+
+  // 加载标签
+  useEffect(() => {
+    loadTags();
+  }, [loadTags]);
 
   // 处理拖拽开始
   const handleDragStart = (e: React.DragEvent, noteId: string) => {
@@ -350,9 +356,17 @@ function Sidebar({ collapsed, onCollapse }: SidebarProps) {
 
   // 判断当前路径是否激活
   const isActive = (path: string) => {
-    return (
-      location.pathname === path || location.pathname.startsWith(path + "/")
-    );
+    // 精确匹配路径
+    if (location.pathname === path) {
+      return true;
+    }
+    // 对于 /notes 路径，只有在精确匹配时才返回true，不匹配子路径
+    // 对于其他路径（如分类、标签），允许子路径匹配
+    if (path === "/notes") {
+      return false;
+    }
+    // 其他路径支持子路径匹配（如 /category/:id）
+    return location.pathname.startsWith(path + "/");
   };
 
   // 创建新笔记
@@ -450,15 +464,6 @@ function Sidebar({ collapsed, onCollapse }: SidebarProps) {
             {!collapsed && "新建"}
           </CreateButton>
         </Dropdown>
-        {!collapsed && (
-          <SecondaryButton
-            icon={<FolderAddOutlined />}
-            onClick={() => setCategoryManagerVisible(true)}
-            block
-          >
-            管理分类
-          </SecondaryButton>
-        )}
       </ActionSection>
 
       {/* 搜索框 */}
@@ -523,6 +528,37 @@ function Sidebar({ collapsed, onCollapse }: SidebarProps) {
           </>
         )}
 
+        {/* 标签 */}
+        {tags.length > 0 && !collapsed && (
+          <>
+            <SectionLabel $collapsed={false}>标签</SectionLabel>
+            {tags.map((tag) => (
+              <NavItem
+                key={tag.id}
+                $active={isActive(`/notes/tag/${tag.id}`)}
+                onClick={() => navigate(`/notes/tag/${tag.id}`)}
+              >
+                <NavIcon $active={isActive(`/notes/tag/${tag.id}`)}>
+                  <TagsOutlined
+                    style={{ color: tag.color || COLORS.inkMuted }}
+                  />
+                </NavIcon>
+                <span style={{ flex: 1 }}>{tag.name}</span>
+                <Tag
+                  color={tag.color}
+                  style={{
+                    margin: 0,
+                    fontSize: TYPOGRAPHY.fontSize.xs,
+                    padding: "2px 6px",
+                  }}
+                >
+                  {/* 这里可以显示该标签的笔记数量 */}
+                </Tag>
+              </NavItem>
+            ))}
+          </>
+        )}
+
         <Divider
           style={{ margin: `${SPACING.md} 0`, borderColor: COLORS.subtle }}
         />
@@ -550,12 +586,6 @@ function Sidebar({ collapsed, onCollapse }: SidebarProps) {
           {collapsed ? "展开" : "收起"}
         </CollapseButton>
       </BottomSection>
-
-      {/* 分类管理弹窗 */}
-      <CategoryManager
-        visible={categoryManagerVisible}
-        onClose={() => setCategoryManagerVisible(false)}
-      />
     </SidebarContainer>
   );
 }

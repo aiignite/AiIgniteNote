@@ -64,11 +64,12 @@ export function useKeyboardShortcuts(
 
 // 全局快捷键 Hook
 export function useGlobalKeyboardShortcuts() {
-  const { createNote, currentNote } = useNoteStore();
+  const { createNote, currentNote, setCurrentNote } = useNoteStore();
   const { createConversation } = useAIStore();
 
-  const handleNewNote = useCallback(() => {
-    createNote({
+  const handleNewNote = useCallback(async () => {
+    // 创建新笔记
+    const newNote = await createNote({
       title: "新建笔记",
       content: "",
       htmlContent: "",
@@ -78,8 +79,15 @@ export function useGlobalKeyboardShortcuts() {
       isFavorite: false,
       fileType: "markdown" as any,
     });
+
+    // 设置为当前笔记并导航
+    setCurrentNote(newNote);
+
+    // 触发导航到新笔记
+    window.location.hash = `/notes/${newNote.id}`;
+
     message.success("已创建新笔记");
-  }, [createNote]);
+  }, [createNote, setCurrentNote]);
 
   const handleSaveNote = useCallback(() => {
     // 触发手动保存

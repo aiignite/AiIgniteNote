@@ -31,6 +31,7 @@ interface NoteStore {
   toggleFavorite: (id: string) => Promise<void>;
   getNotesByCategory: (categoryId: string) => Promise<LocalNote[]>;
   getNotesByTag: (tag: string) => Promise<LocalNote[]>;
+  getNotesByTagId: (tagId: string) => Promise<LocalNote[]>;
   getFavoriteNotes: () => Promise<LocalNote[]>;
   getDeletedNotes: () => Promise<LocalNote[]>;
   createCategory: (
@@ -66,7 +67,62 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
   loadNotes: async () => {
     set({ isLoading: true });
     try {
-      // 使用 filter 而不是 where().equals() 来避免无效键错误
+      const { isOnline } = get();
+
+      if (isOnline) {
+        // 在线状态：从后端API获取最新数据
+        try {
+          const response = await notesApi.getNotes();
+          const remoteNotes = response.data.notes || [];
+
+          // 同步到 IndexedDB
+          for (const note of remoteNotes) {
+            const existing = await db.notes.get(note.id);
+            const localNote = {
+              id: note.id,
+              title: note.title,
+              content: note.content,
+              htmlContent: note.htmlContent,
+              tags: note.tags || [],
+              category: note.categoryId || note.category?.id || "",
+              isDeleted: note.isDeleted || false,
+              isFavorite: note.isFavorite || false,
+              createdAt: new Date(note.createdAt).getTime(),
+              updatedAt: new Date(note.updatedAt).getTime(),
+              version: note.version || 1,
+              fileType: note.fileType || "markdown",
+              metadata: note.metadata,
+            };
+
+            if (existing) {
+              // 只更新远程更新时间更新的笔记
+              if (localNote.updatedAt > existing.updatedAt) {
+                await db.notes.put(localNote);
+              }
+            } else {
+              // 新笔记，添加到本地
+              await db.notes.put(localNote);
+            }
+          }
+
+          // 从 IndexedDB 加载所有笔记
+          const notes = await db.notes
+            .filter((note) => !note.isDeleted)
+            .reverse()
+            .sortBy("updatedAt");
+
+          set({ notes, isLoading: false });
+          return;
+        } catch (apiError) {
+          console.warn(
+            "Failed to load from backend, using local cache:",
+            apiError,
+          );
+          // API调用失败，回退到本地数据
+        }
+      }
+
+      // 离线状态或API失败：从 IndexedDB 加载
       const notes = await db.notes
         .filter((note) => !note.isDeleted)
         .reverse()
@@ -80,6 +136,36 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
 
   loadCategories: async () => {
     try {
+      const { isOnline } = get();
+
+      if (isOnline) {
+        // 在线状态：从后端API获取最新数据
+        try {
+          const response = await notesApi.getCategories();
+          const remoteCategories = response.data || [];
+
+          // 同步到 IndexedDB
+          for (const category of remoteCategories) {
+            const localCategory = {
+              id: category.id,
+              name: category.name,
+              icon: category.icon,
+              color: category.color,
+              sortOrder: category.sortOrder,
+              createdAt: new Date(category.createdAt).getTime(),
+            };
+            await db.categories.put(localCategory);
+          }
+
+          const categories = await db.categories.toArray();
+          set({ categories });
+          return;
+        } catch (apiError) {
+          console.warn("Failed to load categories from backend:", apiError);
+        }
+      }
+
+      // 离线状态或API失败：从 IndexedDB 加载
       const categories = await db.categories.toArray();
       set({ categories });
     } catch (error) {
@@ -256,6 +342,15 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
       return await db.getNotesByTag(tag);
     } catch (error) {
       console.error("Failed to get notes by tag:", error);
+      return [];
+    }
+  },
+
+  getNotesByTagId: async (tagId) => {
+    try {
+      return await db.getNotesByTagId(tagId);
+    } catch (error) {
+      console.error("Failed to get notes by tag ID:", error);
       return [];
     }
   },

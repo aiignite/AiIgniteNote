@@ -3,12 +3,17 @@ import { Spin } from "antd";
 import {
   UserOutlined,
   IdcardOutlined,
+  ApiOutlined,
   ThunderboltOutlined,
+  HistoryOutlined,
+  BarChartOutlined,
   TeamOutlined,
   CloudSyncOutlined,
   BgColorsOutlined,
   KeyOutlined,
   InfoCircleOutlined,
+  FolderOutlined,
+  TagsOutlined,
 } from "@ant-design/icons";
 import styled, { keyframes } from "styled-components";
 import {
@@ -27,7 +32,15 @@ const AccountSettings = lazy(
 const ProfileSettings = lazy(
   () => import("./Settings/components/ProfileSettings"),
 );
-const AIManagement = lazy(() => import("./Settings/components/AIManagement"));
+// AI 相关页面
+const AiModels = lazy(() => import("./Settings/components/AiModels"));
+const AiAssistants = lazy(() => import("./Settings/components/AiAssistants"));
+const ConversationHistoryPage = lazy(
+  () => import("./Settings/components/ConversationHistoryPage"),
+);
+const UsageStatisticsPage = lazy(
+  () => import("./Settings/components/UsageStatisticsPage"),
+);
 const UsersManagement = lazy(
   () => import("./Settings/components/UsersManagement"),
 );
@@ -38,6 +51,10 @@ const AppearanceSettings = lazy(
 const ShortcutsSettings = lazy(
   () => import("./Settings/components/ShortcutsSettings"),
 );
+const CategoriesSettings = lazy(
+  () => import("./Settings/components/CategoriesSettings"),
+);
+const TagsSettings = lazy(() => import("./Settings/components/TagsSettings"));
 const AboutSettings = lazy(() => import("./Settings/components/AboutSettings"));
 
 // ============================================
@@ -257,10 +274,45 @@ const menuItems: MenuItemConfig[] = [
     section: "账号",
   },
   {
-    key: "ai-management",
+    key: "categories",
+    icon: <FolderOutlined />,
+    label: "分类管理",
+    description: "管理笔记分类",
+    section: "内容",
+  },
+  {
+    key: "tags",
+    icon: <TagsOutlined />,
+    label: "标签管理",
+    description: "管理笔记标签",
+    section: "内容",
+  },
+  {
+    key: "ai-models",
+    icon: <ApiOutlined />,
+    label: "AI 模型",
+    description: "配置和管理 AI 模型",
+    section: "AI",
+  },
+  {
+    key: "ai-assistants",
     icon: <ThunderboltOutlined />,
-    label: "AI 管理",
-    description: "配置 AI 模型和助手",
+    label: "AI 助手",
+    description: "自定义 AI 助手和提示词",
+    section: "AI",
+  },
+  {
+    key: "conversation-history",
+    icon: <HistoryOutlined />,
+    label: "对话历史",
+    description: "查看历史对话记录",
+    section: "AI",
+  },
+  {
+    key: "usage-statistics",
+    icon: <BarChartOutlined />,
+    label: "使用统计",
+    description: "查看 AI 使用统计数据",
     section: "AI",
   },
   {
@@ -303,6 +355,7 @@ const menuItems: MenuItemConfig[] = [
 // 按section分组
 const groupedMenuItems: Record<string, MenuItemConfig[]> = {
   账号: menuItems.filter((item) => item.section === "账号"),
+  内容: menuItems.filter((item) => item.section === "内容"),
   AI: menuItems.filter((item) => item.section === "AI"),
   团队: menuItems.filter((item) => item.section === "团队"),
   数据: menuItems.filter((item) => item.section === "数据"),
@@ -325,8 +378,18 @@ function SettingsPage() {
         return <AccountSettings />;
       case "profile":
         return <ProfileSettings />;
-      case "ai-management":
-        return <AIManagement />;
+      case "categories":
+        return <CategoriesSettings />;
+      case "tags":
+        return <TagsSettings />;
+      case "ai-models":
+        return <AiModels />;
+      case "ai-assistants":
+        return <AiAssistants />;
+      case "conversation-history":
+        return <ConversationHistoryPage />;
+      case "usage-statistics":
+        return <UsageStatisticsPage />;
       case "users":
         return <UsersManagement />;
       case "sync":

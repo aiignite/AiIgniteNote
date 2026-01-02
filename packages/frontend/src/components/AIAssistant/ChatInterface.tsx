@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Input, Button, App, Tooltip } from "antd";
+import { Input, Button, App, Tooltip, Select, Divider } from "antd";
 import {
   SendOutlined,
   UserOutlined,
@@ -8,10 +8,13 @@ import {
   CopyOutlined,
   CheckOutlined,
   StopOutlined,
-  ThunderboltOutlined,
-  BulbOutlined,
+  PlusOutlined,
+  EllipsisOutlined,
+  CloseOutlined,
+  DeleteOutlined,
 } from "@ant-design/icons";
 import { useAIStore } from "../../store/aiStore";
+import { AIConversation } from "../../types";
 import styled, { keyframes, css } from "styled-components";
 import MarkdownRenderer from "./MarkdownRenderer";
 import {
@@ -20,6 +23,7 @@ import {
   SPACING,
   BORDER,
   TRANSITION,
+  SHADOW,
 } from "../../styles/design-tokens";
 
 const { TextArea } = Input;
@@ -55,38 +59,182 @@ const ChatContainer = styled.div`
   background: ${COLORS.paper};
 `;
 
-const ChatHeader = styled.div`
-  padding: ${SPACING.md} ${SPACING.lg};
-  border-bottom: 1px solid ${COLORS.subtle};
+// 助手选择器样式
+const AssistantSelector = styled.div`
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: ${COLORS.paper};
+  gap: ${SPACING.sm};
+  position: relative;
+  width: 100%;
 `;
 
-const ChatTitle = styled.div`
+const SelectorLeft = styled.div`
   display: flex;
   align-items: center;
   gap: ${SPACING.sm};
+  flex: 1;
 `;
 
-const ChatIcon = styled.div`
-  width: 32px;
-  height: 32px;
+const SelectorRight = styled.div`
   display: flex;
   align-items: center;
-  justify-content: center;
-  background: ${COLORS.ink};
-  color: ${COLORS.paper};
-  border-radius: ${BORDER.radius.md};
-  font-size: ${TYPOGRAPHY.fontSize.md};
+  gap: ${SPACING.xs};
+  position: relative;
 `;
 
-const ChatName = styled.div`
-  font-family: ${TYPOGRAPHY.fontFamily.display};
+const IconButton = styled(Button)`
+  border: none;
+  background: transparent;
+  color: ${COLORS.inkLight};
   font-size: ${TYPOGRAPHY.fontSize.md};
-  font-weight: ${TYPOGRAPHY.fontWeight.semibold};
+  padding: 4px;
+  height: auto;
+  width: 32px;
+
+  &:hover {
+    color: ${COLORS.accent};
+    background: ${COLORS.subtleLight};
+  }
+`;
+
+const HistoryPanel = styled.div<{ $visible: boolean }>`
+  position: absolute;
+  top: 100%;
+  right: 0;
+  width: 320px;
+  max-height: 400px;
+  background: ${COLORS.paper};
+  border: 1px solid ${COLORS.subtle};
+  border-radius: ${BORDER.radius.md};
+  box-shadow: ${SHADOW.lg};
+  margin-top: ${SPACING.xs};
+  z-index: 1000;
+  display: ${(props) => (props.$visible ? "flex" : "none")};
+  flex-direction: column;
+  animation: ${fadeInUp} 0.2s ease-out;
+  overflow: hidden;
+`;
+
+const HistoryHeader = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: ${SPACING.sm} ${SPACING.md};
+  border-bottom: 1px solid ${COLORS.subtle};
+  font-size: ${TYPOGRAPHY.fontSize.sm};
+  font-weight: ${TYPOGRAPHY.fontWeight.medium};
   color: ${COLORS.ink};
+`;
+
+const HistoryList = styled.div`
+  flex: 1;
+  overflow-y: auto;
+  padding: ${SPACING.xs};
+
+  &::-webkit-scrollbar {
+    width: 4px;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: ${COLORS.subtle};
+    border-radius: 2px;
+  }
+`;
+
+const HistoryItem = styled.div<{ $active: boolean }>`
+  display: flex;
+  align-items: center;
+  gap: ${SPACING.sm};
+  padding: ${SPACING.sm} ${SPACING.md};
+  border-radius: ${BORDER.radius.sm};
+  cursor: pointer;
+  transition: all ${TRANSITION.fast};
+  background: ${(props) =>
+    props.$active ? COLORS.subtleLight : "transparent"};
+
+  &:hover {
+    background: ${COLORS.subtleLight};
+  }
+`;
+
+const HistoryItemContent = styled.div`
+  flex: 1;
+  min-width: 0;
+`;
+
+const HistoryItemTitle = styled.div`
+  font-size: ${TYPOGRAPHY.fontSize.sm};
+  font-weight: ${TYPOGRAPHY.fontWeight.medium};
+  color: ${COLORS.ink};
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+`;
+
+const HistoryItemMeta = styled.div`
+  font-size: ${TYPOGRAPHY.fontSize.xs};
+  color: ${COLORS.inkMuted};
+  display: flex;
+  align-items: center;
+  gap: ${SPACING.xs};
+`;
+
+const EmptyHistory = styled.div`
+  padding: ${SPACING.xl};
+  text-align: center;
+  color: ${COLORS.inkMuted};
+  font-size: ${TYPOGRAPHY.fontSize.sm};
+`;
+
+const AssistantAvatar = styled.span`
+  font-size: ${TYPOGRAPHY.fontSize.lg};
+`;
+
+const StyledSelect = styled(Select)`
+  .ant-select-selector {
+    border-color: ${COLORS.subtle} !important;
+    border-radius: ${BORDER.radius.sm} !important;
+
+    &:hover {
+      border-color: ${COLORS.inkLight} !important;
+    }
+  }
+
+  &.ant-select-focused .ant-select-selector {
+    border-color: ${COLORS.ink} !important;
+    box-shadow: none !important;
+  }
+`;
+
+const AssistantOption = styled.div`
+  display: flex;
+  align-items: center;
+  gap: ${SPACING.sm};
+
+  .assistant-avatar {
+    font-size: ${TYPOGRAPHY.fontSize.md};
+  }
+
+  .assistant-info {
+    display: flex;
+    flex-direction: column;
+
+    .assistant-name {
+      font-size: ${TYPOGRAPHY.fontSize.sm};
+      font-weight: ${TYPOGRAPHY.fontWeight.medium};
+      color: ${COLORS.ink};
+    }
+
+    .assistant-desc {
+      font-size: ${TYPOGRAPHY.fontSize.xs};
+      color: ${COLORS.inkMuted};
+    }
+  }
 `;
 
 const MessagesContainer = styled.div`
@@ -162,7 +310,6 @@ const MessageBubble = styled.div<{ $isUser: boolean }>`
 `;
 
 const MessageContent = styled.div<{ $isUser: boolean }>`
-  /* Markdown 内容样式 */
   & > * {
     margin: 0;
   }
@@ -170,7 +317,6 @@ const MessageContent = styled.div<{ $isUser: boolean }>`
   ${(props) =>
     !props.$isUser &&
     css`
-      /* 代码块特殊样式 */
       pre {
         background: ${COLORS.paperDark};
         border-radius: ${BORDER.radius.sm};
@@ -400,6 +546,32 @@ const EmptyDescription = styled.p`
   max-width: 200px;
 `;
 
+// 菜单操作项样式
+const ActionItem = styled.div<{ $danger?: boolean }>`
+  display: flex;
+  align-items: center;
+  gap: ${SPACING.sm};
+  padding: ${SPACING.sm} ${SPACING.md};
+  cursor: pointer;
+  transition: all ${TRANSITION.fast};
+  color: ${COLORS.inkLight};
+  font-size: ${TYPOGRAPHY.fontSize.sm};
+
+  &:hover {
+    color: ${COLORS.ink};
+    background: ${COLORS.subtleLight};
+  }
+
+  ${(props) =>
+    props.$danger &&
+    `
+    &:hover {
+      color: ${COLORS.error};
+      background: ${COLORS.error}15;
+    }
+  `}
+`;
+
 const SuggestionChips = styled.div`
   display: flex;
   flex-wrap: wrap;
@@ -497,6 +669,165 @@ function CopyButton({ content }: { content: string }) {
   );
 }
 
+// 助手选择下拉组件
+function AssistantSelect() {
+  const {
+    currentAssistant,
+    setCurrentAssistant,
+    assistants,
+    createConversation,
+    conversations,
+    setCurrentConversation,
+    loadConversations,
+    clearConversations,
+  } = useAIStore();
+  const [menuVisible, setMenuVisible] = useState(false);
+
+  useEffect(() => {
+    loadConversations();
+  }, []);
+
+  const handleChange = (value: unknown) => {
+    const assistantId = value as string;
+    const selected = assistants.find((a) => a.id === assistantId);
+    if (selected) {
+      setCurrentAssistant(selected);
+    }
+  };
+
+  const handleNewChat = async () => {
+    await createConversation();
+    setMenuVisible(false);
+  };
+
+  const handleSelectConversation = (conversation: AIConversation) => {
+    setCurrentConversation(conversation);
+    setMenuVisible(false);
+  };
+
+  const handleClearHistory = async () => {
+    await clearConversations();
+    setMenuVisible(false);
+  };
+
+  // 获取最近的对话（最多10条）
+  const recentConversations = conversations
+    .filter((c) => c.messages.length > 0)
+    .slice(0, 10);
+
+  // 格式化时间
+  const formatTime = (timestamp: number) => {
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diff = now.getTime() - date.getTime();
+    const minutes = Math.floor(diff / 60000);
+    const hours = Math.floor(diff / 3600000);
+    const days = Math.floor(diff / 86400000);
+
+    if (minutes < 1) return "刚刚";
+    if (minutes < 60) return `${minutes}分钟前`;
+    if (hours < 24) return `${hours}小时前`;
+    if (days < 7) return `${days}天前`;
+    return date.toLocaleDateString("zh-CN");
+  };
+
+  return (
+    <AssistantSelector>
+      <SelectorLeft>
+        <AssistantAvatar>{currentAssistant.avatar}</AssistantAvatar>
+        <StyledSelect
+          value={currentAssistant.id}
+          onChange={handleChange}
+          style={{ width: 160 }}
+          optionLabelProp="label"
+        >
+          {assistants.map((assistant) => (
+            <Select.Option
+              key={assistant.id}
+              value={assistant.id}
+              label={assistant.name}
+            >
+              <AssistantOption>
+                <span className="assistant-avatar">{assistant.avatar}</span>
+                <div className="assistant-info">
+                  <span className="assistant-name">{assistant.name}</span>
+                  <span className="assistant-desc">
+                    {assistant.description}
+                  </span>
+                </div>
+              </AssistantOption>
+            </Select.Option>
+          ))}
+        </StyledSelect>
+      </SelectorLeft>
+      <SelectorRight>
+        <Tooltip title="新建对话">
+          <IconButton icon={<PlusOutlined />} onClick={handleNewChat} />
+        </Tooltip>
+        <Tooltip title="更多">
+          <IconButton
+            icon={<EllipsisOutlined />}
+            onClick={() => setMenuVisible(!menuVisible)}
+          />
+        </Tooltip>
+
+        {/* 菜单面板 */}
+        <HistoryPanel $visible={menuVisible}>
+          <ActionItem onClick={handleNewChat}>
+            <PlusOutlined />
+            <span>新建对话</span>
+          </ActionItem>
+          <Divider style={{ margin: "4px 0" }} />
+          <HistoryHeader>
+            <span>最近对话</span>
+            <Button
+              type="text"
+              size="small"
+              icon={<CloseOutlined />}
+              onClick={() => setMenuVisible(false)}
+            />
+          </HistoryHeader>
+          <HistoryList>
+            {recentConversations.length === 0 ? (
+              <EmptyHistory>暂无对话历史</EmptyHistory>
+            ) : (
+              recentConversations.map((conv) => (
+                <HistoryItem
+                  key={conv.id}
+                  $active={
+                    conv.id === conversations.find((c) => c.id === conv.id)?.id
+                  }
+                  onClick={() => handleSelectConversation(conv)}
+                >
+                  <HistoryItemContent>
+                    <HistoryItemTitle>
+                      {conv.messages[conv.messages.length - 1]?.content.slice(
+                        0,
+                        30,
+                      ) || "新对话"}
+                      ...
+                    </HistoryItemTitle>
+                    <HistoryItemMeta>
+                      <span>{conv.messages.length} 条消息</span>
+                      <span>·</span>
+                      <span>{formatTime(conv.updatedAt)}</span>
+                    </HistoryItemMeta>
+                  </HistoryItemContent>
+                </HistoryItem>
+              ))
+            )}
+          </HistoryList>
+          <Divider style={{ margin: "4px 0" }} />
+          <ActionItem $danger onClick={handleClearHistory}>
+            <DeleteOutlined />
+            <span>清空历史</span>
+          </ActionItem>
+        </HistoryPanel>
+      </SelectorRight>
+    </AssistantSelector>
+  );
+}
+
 const suggestions = [
   "帮我润色这段文字",
   "生成一份大纲",
@@ -517,6 +848,7 @@ function ChatInterface() {
     currentResponse,
     selectedText,
     setSelectedText,
+    currentAssistant,
   } = useAIStore();
   const [inputValue, setInputValue] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -533,10 +865,6 @@ function ChatInterface() {
   useEffect(() => {
     const handleSelectionChange = () => {
       const text = getSelectedText();
-      console.log("ChatInterface selectionchange:", {
-        text: text.substring(0, 50),
-        selection: window.getSelection()?.toString().substring(0, 50),
-      });
       setSelectedText(text);
     };
 
@@ -586,7 +914,6 @@ function ChatInterface() {
       await sendMessage(
         currentConversation.id,
         messageToSend,
-        undefined,
         controller.signal,
       );
     } catch (error) {
@@ -628,21 +955,43 @@ function ChatInterface() {
     return <MarkdownRenderer content={content} />;
   };
 
+  // 根据当前助手生成建议
+  const getSuggestions = () => {
+    switch (currentAssistant.id) {
+      case "translator":
+        return ["翻译成英文", "翻译成中文", "翻译成日文"];
+      case "writer":
+        return ["润色这段文字", "改写得更简洁", "调整语气更正式"];
+      case "coder":
+        return ["解释这段代码", "优化代码性能", "添加注释"];
+      case "summarizer":
+        return ["总结要点", "提取关键词", "生成摘要"];
+      default:
+        return suggestions;
+    }
+  };
+
   return (
     <ChatContainer>
+      {/* 助手选择器 */}
+      <InputContainer
+        style={{
+          padding: "8px 16px",
+          borderBottom: `1px solid ${COLORS.subtle}`,
+        }}
+      >
+        <AssistantSelect />
+      </InputContainer>
+
       {/* 消息列表 */}
       <MessagesContainer>
         {currentConversation?.messages.length === 0 ? (
           <EmptyState>
-            <EmptyIcon>
-              <BulbOutlined />
-            </EmptyIcon>
-            <EmptyTitle>有什么可以帮你的？</EmptyTitle>
-            <EmptyDescription>
-              我可以帮你生成内容、改写润色、提取摘要等
-            </EmptyDescription>
+            <EmptyIcon>{currentAssistant.avatar}</EmptyIcon>
+            <EmptyTitle>我是 {currentAssistant.name}</EmptyTitle>
+            <EmptyDescription>{currentAssistant.description}</EmptyDescription>
             <SuggestionChips>
-              {suggestions.map((suggestion) => (
+              {getSuggestions().map((suggestion) => (
                 <SuggestionChip
                   key={suggestion}
                   onClick={() => handleSuggestion(suggestion)}
@@ -723,7 +1072,7 @@ function ChatInterface() {
         )}
         <InputWrapper>
           <StyledTextArea
-            placeholder="输入消息... (回车发送，Shift+Enter换行)"
+            placeholder={`与${currentAssistant.name}对话... (回车发送，Shift+Enter换行)`}
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             onPressEnter={(e) => {

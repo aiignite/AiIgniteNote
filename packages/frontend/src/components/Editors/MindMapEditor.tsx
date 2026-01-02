@@ -191,15 +191,13 @@ function MindMapEditor({
     const instance = new MindMap({
       el: containerRef.current,
       data: initialData.root || initialData,
-      layout: currentLayout,
+      layout: currentLayout as any,
       theme: currentTheme,
       // 画布操作
-      enableDragCanvas: true,
       enableZoom: true,
       mouseWheelZoom: true,
       // 只读模式设置
       readonly: false,
-      isReadonly: false,
       // 快捷键
       enableShortCut: true,
       // 节点编辑
@@ -219,7 +217,7 @@ function MindMapEditor({
         fill: "rgb(94, 200, 248)",
       },
       dragOpacityConfig: { cloneNodeOpacity: 0.5, beingDragNodeOpacity: 0.3 },
-    });
+    } as any);
 
     mindMapRef.current = instance;
 
@@ -228,7 +226,7 @@ function MindMapEditor({
       if (mindMapRef.current) {
         // 使用 requestAnimationFrame 确保在布局更新后再调整
         requestAnimationFrame(() => {
-          mindMapRef.current.resize();
+          mindMapRef.current?.resize();
         });
       }
     });
@@ -242,7 +240,7 @@ function MindMapEditor({
     // 监听数据变化
     instance.on("data_change", () => {
       try {
-        const rootData = instance.getData();
+        const rootData = instance.getData(false);
         setData({ root: { data: rootData } });
       } catch (e) {
         console.error("获取数据失败:", e);
@@ -252,7 +250,7 @@ function MindMapEditor({
     // 渲染完成
     setTimeout(() => {
       try {
-        const rootData = instance.getData();
+        const rootData = instance.getData(false);
         setData({ root: { data: rootData } });
       } catch (e) {
         console.error("获取数据失败:", e);
@@ -282,7 +280,14 @@ function MindMapEditor({
       onChange(jsonData, {
         ...metadata,
         mindmapData: jsonData,
-        mindmapLayout: currentLayout,
+        mindmapLayout: currentLayout as
+          | "mindMap"
+          | "logicalStructure"
+          | "organizationStructure"
+          | "catalogOrganization"
+          | "fishbone"
+          | "timeline"
+          | "verticalTimeline",
       });
       onSave?.();
       message.success("保存成功");

@@ -297,9 +297,17 @@ interface NoteListProps {
   selectedNoteId?: string;
   onSelectNote: (noteId: string) => void;
   onBack?: () => void;
+  filterCategoryId?: string;
+  filterTagId?: string;
 }
 
-function NoteList({ selectedNoteId, onSelectNote, onBack }: NoteListProps) {
+function NoteList({
+  selectedNoteId,
+  onSelectNote,
+  onBack,
+  filterCategoryId,
+  filterTagId,
+}: NoteListProps) {
   const {
     notes,
     setCurrentNote,
@@ -310,6 +318,7 @@ function NoteList({ selectedNoteId, onSelectNote, onBack }: NoteListProps) {
     deleteNote,
     categories,
   } = useNoteStore();
+  const { getNotesByTagId } = useNoteStore(); // 从 store 中获取按标签查询的方法
   const [searchValue, setSearchValue] = useState("");
   const [filteredNotes, setFilteredNotes] = useState<Note[]>(notes);
   const [loading, setLoading] = useState(false);
@@ -324,6 +333,7 @@ function NoteList({ selectedNoteId, onSelectNote, onBack }: NoteListProps) {
   // 判断当前路由类型
   const isFavoritesRoute = location.pathname === "/notes/favorites";
   const isCategoryRoute = location.pathname.startsWith("/notes/category/");
+  const isTagRoute = location.pathname.startsWith("/notes/tag/");
 
   // 加载笔记数据
   useEffect(() => {
@@ -334,14 +344,27 @@ function NoteList({ selectedNoteId, onSelectNote, onBack }: NoteListProps) {
       try {
         let displayNotes: Note[] = [];
 
+        // 优先级：收藏 > 分类 > 标签 > 所有笔记
         if (isFavoritesRoute) {
+          // 收藏：优先级最高
           displayNotes = await getFavoriteNotes();
-        } else if (isCategoryRoute && categoryId) {
-          displayNotes = await getNotesByCategory(categoryId);
+        } else if (
+          (isCategoryRoute || filterCategoryId) &&
+          (categoryId || filterCategoryId)
+        ) {
+          // 分类筛选
+          displayNotes = await getNotesByCategory(
+            categoryId || filterCategoryId!,
+          );
+        } else if ((isTagRoute || filterTagId) && filterTagId) {
+          // 标签筛选
+          displayNotes = await getNotesByTagId(filterTagId);
         } else {
-          displayNotes = notes;
+          // 所有笔记（默认）
+          displayNotes = notes.filter((note) => !note.isDeleted);
         }
 
+        // 搜索过滤
         if (searchValue) {
           displayNotes = displayNotes.filter(
             (note) =>
@@ -377,9 +400,13 @@ function NoteList({ selectedNoteId, onSelectNote, onBack }: NoteListProps) {
     notes,
     isFavoritesRoute,
     isCategoryRoute,
+    isTagRoute,
     categoryId,
+    filterCategoryId,
+    filterTagId,
     getFavoriteNotes,
     getNotesByCategory,
+    getNotesByTagId,
   ]);
 
   const handleSelectNote = (note: Note) => {

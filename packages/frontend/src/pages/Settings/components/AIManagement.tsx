@@ -4,6 +4,7 @@ import {
   ApiOutlined,
   ThunderboltOutlined,
   BarChartOutlined,
+  HistoryOutlined,
 } from "@ant-design/icons";
 import styled, { keyframes } from "styled-components";
 import {
@@ -17,6 +18,7 @@ import {
 import AIAssistantsSettings from "./AIAssistantsSettings";
 import ModelsSettings from "./ModelsSettings";
 import ModelsUsage from "./ModelsUsage";
+import ConversationHistory from "./ConversationHistory";
 
 // ============================================
 // 动画
@@ -134,7 +136,7 @@ const tabItems: TabItem[] = [
     label: (
       <span>
         <ApiOutlined />
-        模型配置
+        模型管理
       </span>
     ),
     children: <ModelsSettings />,
@@ -148,6 +150,16 @@ const tabItems: TabItem[] = [
       </span>
     ),
     children: <AIAssistantsSettings />,
+  },
+  {
+    key: "history",
+    label: (
+      <span>
+        <HistoryOutlined />
+        对话历史
+      </span>
+    ),
+    children: <ConversationHistory />,
   },
   {
     key: "usage",

@@ -39,7 +39,11 @@ const ListCol = styled(Col)<ListColProps>`
 `;
 
 function NotePage() {
-  const { noteId } = useParams<{ noteId?: string }>();
+  const { noteId, categoryId, tagId } = useParams<{
+    noteId?: string;
+    categoryId?: string;
+    tagId?: string;
+  }>();
   const [selectedNoteId, setSelectedNoteId] = useState<string | undefined>(
     noteId,
   );
@@ -87,13 +91,7 @@ function NotePage() {
           </div>
         ) : (
           <div style={{ width: "100%", height: "100%" }}>
-            <NoteEditor
-              noteId={selectedNoteId}
-              onBack={() => {
-                setShowList(true);
-                setSelectedNoteId(undefined);
-              }}
-            />
+            <NoteEditor noteId={selectedNoteId} />
           </div>
         )}
       </PageContainer>
@@ -116,6 +114,8 @@ function NotePage() {
           <NoteList
             selectedNoteId={selectedNoteId}
             onSelectNote={setSelectedNoteId}
+            filterCategoryId={categoryId}
+            filterTagId={tagId}
           />
         </ListCol>
 

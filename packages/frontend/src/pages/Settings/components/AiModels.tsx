@@ -10,13 +10,13 @@ import {
   InputNumber,
   Switch,
   Popconfirm,
-  Statistic,
-  Row,
-  Col,
-  Select,
+  Segmented,
   App,
   Divider,
-  Segmented,
+  Select,
+  Row,
+  Col,
+  Statistic,
 } from "antd";
 import {
   ApiOutlined,
@@ -25,9 +25,9 @@ import {
   PlusOutlined,
   CheckCircleOutlined,
   CloseCircleOutlined,
-  InfoCircleOutlined,
   BarsOutlined,
   AppstoreOutlined,
+  InfoCircleOutlined,
 } from "@ant-design/icons";
 import styled, { keyframes } from "styled-components";
 import {
@@ -38,7 +38,9 @@ import {
   SHADOW,
   TRANSITION,
 } from "../../../styles/design-tokens";
-import { modelsApi } from "../../../lib/api/models";
+import { useModelStore } from "../../../store/modelStore";
+import { ModelConfig } from "../../../types";
+import { db } from "../../../db";
 
 // ============================================
 // 动画
@@ -58,7 +60,7 @@ const Header = styled.div`
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: ${SPACING.xl};
+  margin-bottom: ${SPACING.lg};
 
   h2 {
     font-family: ${TYPOGRAPHY.fontFamily.display};
@@ -68,6 +70,12 @@ const Header = styled.div`
     margin: 0;
     letter-spacing: ${TYPOGRAPHY.letterSpacing.tight};
   }
+`;
+
+const Description = styled.p`
+  font-size: ${TYPOGRAPHY.fontSize.sm};
+  color: ${COLORS.inkLight};
+  margin: 0;
 `;
 
 const ViewToggle = styled(Segmented)`
@@ -87,6 +95,7 @@ const ModelCard = styled(Card)`
   border-radius: ${BORDER.radius.md};
   transition: all ${TRANSITION.fast};
   animation: ${fadeIn} 0.3s ease-out;
+  background: ${COLORS.paper};
 
   &:hover {
     border-color: ${COLORS.inkLight};
@@ -100,6 +109,7 @@ const ModelCard = styled(Card)`
   }
 
   .ant-card-actions {
+    background: ${COLORS.background};
     > li {
       margin: 0;
 
@@ -117,17 +127,17 @@ const ModelCard = styled(Card)`
   }
 `;
 
-const ModelIcon = styled.div`
+const ModelIcon = styled.div<{ $color?: string }>`
   width: 48px;
   height: 48px;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: ${COLORS.background};
+  background: ${(props) => props.$color || COLORS.background};
   border-radius: ${BORDER.radius.md};
   margin-bottom: ${SPACING.md};
   font-size: ${TYPOGRAPHY.fontSize["2xl"]};
-  color: ${COLORS.ink};
+  color: ${(props) => props.$color || COLORS.ink};
 `;
 
 const ModelTitle = styled.div`
@@ -184,16 +194,16 @@ const ListItemContainer = styled.div`
   }
 `;
 
-const ListItemIcon = styled.div`
+const ListItemIcon = styled.div<{ $color?: string }>`
   width: 40px;
   height: 40px;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: ${COLORS.background};
+  background: ${(props) => props.$color || COLORS.background};
   border-radius: ${BORDER.radius.sm};
   font-size: ${TYPOGRAPHY.fontSize.xl};
-  color: ${COLORS.ink};
+  color: ${(props) => props.$color || COLORS.ink};
   flex-shrink: 0;
 `;
 
@@ -232,24 +242,28 @@ const API_TYPE_OPTIONS = [
     value: "openai",
     description: "OpenAI、DeepSeek、Moonshot等",
     color: "green",
+    iconColor: "#52c41a",
   },
   {
     label: "Anthropic 格式",
     value: "anthropic",
     description: "Claude、智谱GLM等",
     color: "blue",
+    iconColor: "#1890ff",
   },
   {
     label: "Ollama 本地",
     value: "ollama",
     description: "本地Ollama部署（无需密钥）",
     color: "orange",
+    iconColor: "#fa8c16",
   },
   {
     label: "LM Studio 本地",
     value: "lmstudio",
     description: "本地LM Studio（无需密钥）",
     color: "purple",
+    iconColor: "#722ed1",
   },
 ];
 
@@ -266,20 +280,6 @@ type ViewMode = "list" | "grid";
 // Types
 // ============================================
 
-interface ModelConfig {
-  id: string;
-  name: string;
-  description: string;
-  apiEndpoint: string;
-  apiType: string;
-  model: string;
-  temperature: number;
-  maxTokens: number;
-  topP: number;
-  enabled: boolean;
-  isDefault: boolean;
-}
-
 interface UsageStats {
   totalCalls: number;
   successRate: number;
@@ -290,56 +290,71 @@ interface UsageStats {
 // Main Component
 // ============================================
 
-export default function ModelsSettings() {
-  const [models, setModels] = useState<ModelConfig[]>([]);
-  const [usageStats, setUsageStats] = useState<Record<string, UsageStats>>({});
+export default function AiModels() {
   const [loading, setLoading] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [editingModel, setEditingModel] = useState<ModelConfig | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [form] = Form.useForm();
   const { message } = App.useApp();
+  const { configs, loadConfigs, updateConfig, deleteConfig, createConfig } =
+    useModelStore();
 
-  // 监听API类型变化，自动填充端点
-  const apiType = Form.useWatch("apiType", form);
+  // 加载状态（使用统计数据）
+  const [usageStats, setUsageStats] = useState<Record<string, UsageStats>>({});
 
   useEffect(() => {
-    loadModels();
+    loadConfigs();
     loadUsageStats();
   }, []);
 
-  const loadModels = async () => {
-    setLoading(true);
-    try {
-      const response = await modelsApi.getConfigs();
-      setModels(response.data);
-    } catch (error) {
-      message.error("加载模型配置失败");
-    } finally {
-      setLoading(false);
-    }
-  };
+  const apiType = Form.useWatch("apiType", form);
 
   const loadUsageStats = async () => {
     try {
-      const response = await modelsApi.getUsage();
-      const data = response.data;
+      // 从 IndexedDB 加载使用日志
+      const allLogs = await db.usageLogs.toArray();
 
-      if (data.byModel && Array.isArray(data.byModel)) {
-        const statsMap: Record<string, UsageStats> = {};
-        data.byModel.forEach((stat: any) => {
-          statsMap[stat.modelId] = {
-            totalCalls: stat.totalCalls || 0,
-            successRate: stat.successRate || 0,
-            totalTokens: stat.totalTokens || 0,
+      // 按模型分组统计
+      const statsMap: Record<string, UsageStats> = {};
+      const successMap: Record<string, number> = {};
+
+      for (const log of allLogs) {
+        const modelId = log.modelId || "unknown";
+        if (!statsMap[modelId]) {
+          statsMap[modelId] = {
+            totalCalls: 0,
+            successRate: 0,
+            totalTokens: 0,
           };
-        });
-        setUsageStats(statsMap);
-      } else {
-        setUsageStats({});
+          successMap[modelId] = 0;
+        }
+
+        statsMap[modelId].totalCalls++;
+
+        // 统计成功次数
+        if (log.success !== false) {
+          successMap[modelId]++;
+        }
+
+        // 统计 tokens
+        const inputTokens = (log as any).inputTokens || 0;
+        const outputTokens = (log as any).outputTokens || 0;
+        statsMap[modelId].totalTokens += inputTokens + outputTokens;
       }
+
+      // 计算成功率
+      for (const modelId in statsMap) {
+        const stat = statsMap[modelId];
+        stat.successRate =
+          stat.totalCalls > 0
+            ? (successMap[modelId] / stat.totalCalls) * 100
+            : 0;
+      }
+
+      setUsageStats(statsMap);
     } catch (error) {
-      setUsageStats({});
+      console.error("Failed to load usage stats:", error);
     }
   };
 
@@ -363,37 +378,10 @@ export default function ModelsSettings() {
 
   const handleDelete = async (id: string) => {
     try {
-      await modelsApi.deleteConfig(id);
+      await deleteConfig(id);
       message.success("删除成功");
-      loadModels();
     } catch (error) {
       message.error("删除失败");
-    }
-  };
-
-  const handleToggleDefault = async (model: ModelConfig) => {
-    try {
-      await modelsApi.updateConfig(model.id, {
-        ...model,
-        isDefault: !model.isDefault,
-      });
-      message.success("设置成功");
-      loadModels();
-    } catch (error) {
-      message.error("设置失败");
-    }
-  };
-
-  const handleToggleEnabled = async (model: ModelConfig) => {
-    try {
-      await modelsApi.updateConfig(model.id, {
-        ...model,
-        enabled: !model.enabled,
-      });
-      message.success("操作成功");
-      loadModels();
-    } catch (error) {
-      message.error("操作失败");
     }
   };
 
@@ -401,18 +389,35 @@ export default function ModelsSettings() {
     setLoading(true);
     try {
       if (editingModel) {
-        await modelsApi.updateConfig(editingModel.id, values);
+        await updateConfig(editingModel.id, values);
         message.success("更新成功");
       } else {
-        await modelsApi.createConfig(values);
+        await createConfig(values);
         message.success("创建成功");
       }
       setModalVisible(false);
-      loadModels();
-    } catch (error) {
-      message.error("操作失败: " + (error as Error).message);
+    } catch (error: any) {
+      message.error("操作失败: " + error.message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleToggleDefault = async (model: ModelConfig) => {
+    try {
+      await updateConfig(model.id, { isDefault: !model.isDefault });
+      message.success("设置成功");
+    } catch (error) {
+      message.error("设置失败");
+    }
+  };
+
+  const handleToggleEnabled = async (model: ModelConfig) => {
+    try {
+      await updateConfig(model.id, { enabled: !model.enabled });
+      message.success("操作成功");
+    } catch (error) {
+      message.error("操作失败");
     }
   };
 
@@ -468,7 +473,7 @@ export default function ModelsSettings() {
             </Popconfirm>,
           ]}
         >
-          <ModelIcon>
+          <ModelIcon $color={apiTypeInfo?.iconColor}>
             <ApiOutlined />
           </ModelIcon>
           <ModelTitle>{model.name}</ModelTitle>
@@ -538,7 +543,7 @@ export default function ModelsSettings() {
 
     return (
       <ListItemContainer key={model.id}>
-        <ListItemIcon>
+        <ListItemIcon $color={apiTypeInfo?.iconColor}>
           <ApiOutlined />
         </ListItemIcon>
         <ListItemContent>
@@ -605,7 +610,12 @@ export default function ModelsSettings() {
   return (
     <Container>
       <Header>
-        <h2>模型管理</h2>
+        <div>
+          <h2>AI 模型</h2>
+          <Description>
+            配置和管理 AI 模型，支持多种 API 格式和本地模型
+          </Description>
+        </div>
         <Space>
           <ViewToggle
             value={viewMode}
@@ -622,10 +632,10 @@ export default function ModelsSettings() {
       </Header>
 
       {viewMode === "grid" ? (
-        <CardGrid gutter={16}>{models.map(renderModelCard)}</CardGrid>
+        <CardGrid gutter={16}>{configs.map(renderModelCard)}</CardGrid>
       ) : (
         <div>
-          {models.length === 0 ? (
+          {configs.length === 0 ? (
             <div
               style={{
                 textAlign: "center",
@@ -636,11 +646,12 @@ export default function ModelsSettings() {
               暂无模型配置，点击右上角"添加模型"进行添加
             </div>
           ) : (
-            models.map(renderListItem)
+            configs.map(renderListItem)
           )}
         </div>
       )}
 
+      {/* 添加/编辑模型弹窗 */}
       <Modal
         title={editingModel ? "编辑模型配置" : "添加模型配置"}
         open={modalVisible}

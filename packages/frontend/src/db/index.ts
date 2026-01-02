@@ -3,6 +3,7 @@ import {
   LocalNote as Note,
   NoteVersion,
   LocalCategory as Category,
+  LocalTag as Tag,
   AIConversation,
   AIMessage,
   ModelConfig,
@@ -10,6 +11,7 @@ import {
   Attachment,
   FileAttachment,
   NoteFileType,
+  LocalAIAssistant,
 } from "../types";
 
 export class AiNoteDatabase extends Dexie {
@@ -21,6 +23,14 @@ export class AiNoteDatabase extends Dexie {
   usageLogs!: Table<ModelUsageLog>;
   attachments!: Table<Attachment>;
   fileAttachments!: Table<FileAttachment>;
+  aiAssistants!: Table<LocalAIAssistant>;
+  tags!: Table<Tag>;
+  noteTags!: Table<{
+    id: string;
+    noteId: string;
+    tagId: string;
+    createdAt: number;
+  }>;
 
   constructor() {
     super("AiNoteDB");
@@ -59,6 +69,237 @@ export class AiNoteDatabase extends Dexie {
           }
         }
       });
+
+    // 数据库版本 3：添加 AI 助手支持
+    this.version(3)
+      .stores({
+        notes:
+          "id, title, category, fileType, isDeleted, isFavorite, createdAt, updatedAt",
+        noteVersions: "id, noteId, createdAt",
+        categories: "id, name, createdAt",
+        conversations: "id, noteId, createdAt, updatedAt",
+        modelConfigs: "id, name, enabled",
+        usageLogs: "id, modelId, timestamp",
+        attachments: "id, noteId, name, createdAt",
+        fileAttachments: "id, noteId, fileType, createdAt",
+        aiAssistants: "id, isBuiltIn, isActive, sortOrder",
+      })
+      .upgrade(async (tx) => {
+        // 数据迁移：初始化默认 AI 助手
+        const defaultAssistants: LocalAIAssistant[] = [
+          {
+            id: "general",
+            name: "通用助手",
+            description: "处理各种通用问答和任务",
+            systemPrompt:
+              "你是一个有用的AI助手，可以帮助用户完成各种任务。请用简洁、准确的方式回答问题。",
+            avatar: "🤖",
+            model: "",
+            isBuiltIn: true,
+            isActive: true,
+            sortOrder: 1,
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+          },
+          {
+            id: "translator",
+            name: "翻译专家",
+            description: "专业的多语言翻译助手",
+            systemPrompt:
+              "你是一个专业的翻译助手。当用户提供文本时，请将其翻译成目标语言。如果用户没有指定目标语言，默认翻译成中文。请保持原文的语气和格式。",
+            avatar: "🌐",
+            model: "",
+            isBuiltIn: true,
+            isActive: true,
+            sortOrder: 2,
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+          },
+          {
+            id: "writer",
+            name: "写作助手",
+            description: "帮助润色和改进文章",
+            systemPrompt:
+              "你是一个专业的写作助手。你可以帮助用户润色文章、改进表达、调整语气。请保持原文的核心意思，同时让表达更加流畅和准确。",
+            avatar: "✍️",
+            model: "",
+            isBuiltIn: true,
+            isActive: true,
+            sortOrder: 3,
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+          },
+          {
+            id: "coder",
+            name: "编程助手",
+            description: "帮助编写和调试代码",
+            systemPrompt:
+              "你是一个专业的编程助手。你可以帮助用户编写代码、调试程序、解释技术概念。请提供清晰、可运行的代码示例，并附带必要的注释。",
+            avatar: "💻",
+            model: "",
+            isBuiltIn: true,
+            isActive: true,
+            sortOrder: 4,
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+          },
+          {
+            id: "summarizer",
+            name: "摘要助手",
+            description: "快速总结文档内容",
+            systemPrompt:
+              "你是一个专业的摘要助手。请将用户提供的长文本总结成简洁的要点，保留关键信息和核心观点。",
+            avatar: "📝",
+            model: "",
+            isBuiltIn: true,
+            isActive: true,
+            sortOrder: 5,
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+          },
+        ];
+
+        for (const assistant of defaultAssistants) {
+          try {
+            await tx.table<LocalAIAssistant>("aiAssistants").add(assistant);
+          } catch {
+            // 忽略已存在的助手
+          }
+        }
+      });
+
+    // 数据库版本 4：添加标签支持
+    this.version(4)
+      .stores({
+        notes:
+          "id, title, category, fileType, isDeleted, isFavorite, createdAt, updatedAt",
+        noteVersions: "id, noteId, createdAt",
+        categories: "id, name, createdAt",
+        conversations: "id, noteId, createdAt, updatedAt",
+        modelConfigs: "id, name, enabled",
+        usageLogs: "id, modelId, timestamp",
+        attachments: "id, noteId, name, createdAt",
+        fileAttachments: "id, noteId, fileType, createdAt",
+        aiAssistants: "id, isBuiltIn, isActive, sortOrder",
+        tags: "id, name, createdAt",
+        noteTags: "id, noteId, tagId, createdAt",
+      })
+      .upgrade(async () => {
+        // 标签功能不需要数据迁移
+        console.log("Database upgraded to version 4: Tags support added");
+      });
+  }
+
+  // ============================================
+  // 标签操作
+  // ============================================
+
+  async getTags(): Promise<Tag[]> {
+    return await this.tags.toArray();
+  }
+
+  async getTag(id: string): Promise<Tag | undefined> {
+    return await this.tags.get(id);
+  }
+
+  async createTag(
+    tag: Omit<Tag, "id" | "createdAt" | "updatedAt">,
+  ): Promise<Tag> {
+    const id = `tag_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+    const now = Date.now();
+    const newTag: Tag = {
+      ...tag,
+      id,
+      createdAt: now,
+      updatedAt: now,
+    };
+    await this.tags.add(newTag);
+    return newTag;
+  }
+
+  async updateTag(
+    id: string,
+    updates: Partial<Omit<Tag, "id" | "createdAt" | "updatedAt">>,
+  ): Promise<void> {
+    await this.tags.update(id, {
+      ...updates,
+      updatedAt: Date.now(),
+    });
+  }
+
+  async deleteTag(id: string): Promise<void> {
+    // 删除标签
+    await this.tags.delete(id);
+    // 删除关联的笔记标签关系
+    await this.noteTags.where("tagId").equals(id).delete();
+  }
+
+  async setNoteTags(noteId: string, tagIds: string[]): Promise<void> {
+    // 删除现有的标签关联
+    await this.noteTags.where("noteId").equals(noteId).delete();
+
+    // 创建新的标签关联
+    for (const tagId of tagIds) {
+      const id = `notetag_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+      await this.noteTags.add({
+        id,
+        noteId,
+        tagId,
+        createdAt: Date.now(),
+      });
+    }
+  }
+
+  async getNoteTags(noteId: string): Promise<Tag[]> {
+    const noteTagRelations = await this.noteTags
+      .where("noteId")
+      .equals(noteId)
+      .toArray();
+
+    const tags: Tag[] = [];
+    for (const relation of noteTagRelations) {
+      const tag = await this.tags.get(relation.tagId);
+      if (tag) {
+        tags.push(tag);
+      }
+    }
+
+    return tags;
+  }
+
+  async setNoteTags(noteId: string, tagIds: string[]): Promise<void> {
+    // 删除现有的标签关联
+    await this.noteTags.where("noteId").equals(noteId).delete();
+
+    // 创建新的标签关联
+    for (const tagId of tagIds) {
+      const id = `notetag_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+      await this.noteTags.add({
+        id,
+        noteId,
+        tagId,
+        createdAt: Date.now(),
+      });
+    }
+  }
+
+  async getNotesByTagId(tagId: string): Promise<Note[]> {
+    const noteTagRelations = await this.noteTags
+      .where("tagId")
+      .equals(tagId)
+      .toArray();
+
+    const noteIds = noteTagRelations.map((r) => r.noteId);
+    const notes: Note[] = [];
+
+    for (const noteId of noteIds) {
+      const note = await this.notes.get(noteId);
+      if (note && !note.isDeleted) {
+        notes.push(note);
+      }
+    }
+
+    return notes;
   }
 
   // 笔记操作
@@ -157,7 +398,6 @@ export class AiNoteDatabase extends Dexie {
     const version: NoteVersion = {
       id: `version_${note.id}_${note.version}`,
       noteId: note.id,
-      title: note.title,
       content: note.content,
       createdAt: Date.now(),
     };
@@ -229,10 +469,19 @@ export class AiNoteDatabase extends Dexie {
     };
 
     conversation.messages.push(newMessage);
-    await this.conversations.update(conversationId, {
-      messages: conversation.messages,
-      updatedAt: Date.now(),
-    });
+
+    // 只有当对话有实际内容时才保存到数据库
+    // 如果只是系统消息或空消息，且对话只有这一条消息，则不保存
+    const hasUserContent = conversation.messages.some(
+      (m) => m.role === "user" && m.content.trim(),
+    );
+
+    if (hasUserContent) {
+      await this.conversations.update(conversationId, {
+        messages: conversation.messages,
+        updatedAt: Date.now(),
+      });
+    }
   }
 
   async getConversations(noteId?: string): Promise<AIConversation[]> {
@@ -312,6 +561,51 @@ export class AiNoteDatabase extends Dexie {
   async deleteNoteFileAttachments(noteId: string): Promise<void> {
     await this.fileAttachments.where("noteId").equals(noteId).delete();
   }
+
+  // ============================================
+  // AI 助手操作
+  // ============================================
+
+  async getAssistants(): Promise<LocalAIAssistant[]> {
+    return await this.aiAssistants.toArray();
+  }
+
+  async getAssistant(id: string): Promise<LocalAIAssistant | undefined> {
+    return await this.aiAssistants.get(id);
+  }
+
+  async createAssistant(
+    assistant: Omit<LocalAIAssistant, "id" | "createdAt" | "updatedAt">,
+  ): Promise<LocalAIAssistant> {
+    const id = `assistant_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+    const now = Date.now();
+    const newAssistant: LocalAIAssistant = {
+      ...assistant,
+      id,
+      createdAt: now,
+      updatedAt: now,
+    };
+    await this.aiAssistants.add(newAssistant);
+    return newAssistant;
+  }
+
+  async updateAssistant(
+    id: string,
+    updates: Partial<LocalAIAssistant>,
+  ): Promise<void> {
+    await this.aiAssistants.update(id, {
+      ...updates,
+      updatedAt: Date.now(),
+    });
+  }
+
+  async deleteAssistant(id: string): Promise<void> {
+    await this.aiAssistants.delete(id);
+  }
+
+  async getActiveAssistants(): Promise<LocalAIAssistant[]> {
+    return await this.aiAssistants.where("isActive").equals(true).toArray();
+  }
 }
 
 export const db = new AiNoteDatabase();
@@ -343,18 +637,105 @@ export async function initializeDatabase() {
       // 创建默认模型配置（需要用户配置API Key）
       try {
         await db.modelConfigs.add({
-          id: "default",
+          id: `model_${Date.now()}_default`, // 使用唯一 ID 而不是 "default"
           name: "GLM-4.7",
           apiKey: "",
           apiEndpoint: "https://open.bigmodel.cn/api/coding/paas/v4",
+          apiType: "openai",
           model: "glm-4.7",
           temperature: 0.7,
           maxTokens: 2000,
           topP: 0.9,
           enabled: true,
+          isDefault: true,
         });
       } catch {
         // 忽略已存在的配置
+      }
+    }
+
+    // 创建默认 AI 助手
+    const assistantCount = await db.aiAssistants.count();
+    if (assistantCount === 0) {
+      const defaultAssistants: LocalAIAssistant[] = [
+        {
+          id: "general",
+          name: "通用助手",
+          description: "处理各种通用问答和任务",
+          systemPrompt:
+            "你是一个有用的AI助手，可以帮助用户完成各种任务。请用简洁、准确的方式回答问题。",
+          avatar: "🤖",
+          model: "",
+          isBuiltIn: true,
+          isActive: true,
+          sortOrder: 1,
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        },
+        {
+          id: "translator",
+          name: "翻译专家",
+          description: "专业的多语言翻译助手",
+          systemPrompt:
+            "你是一个专业的翻译助手。当用户提供文本时，请将其翻译成目标语言。如果用户没有指定目标语言，默认翻译成中文。请保持原文的语气和格式。",
+          avatar: "🌐",
+          model: "",
+          isBuiltIn: true,
+          isActive: true,
+          sortOrder: 2,
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        },
+        {
+          id: "writer",
+          name: "写作助手",
+          description: "帮助润色和改进文章",
+          systemPrompt:
+            "你是一个专业的写作助手。你可以帮助用户润色文章、改进表达、调整语气。请保持原文的核心意思，同时让表达更加流畅和准确。",
+          avatar: "✍️",
+          model: "",
+          isBuiltIn: true,
+          isActive: true,
+          sortOrder: 3,
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        },
+        {
+          id: "coder",
+          name: "编程助手",
+          description: "帮助编写和调试代码",
+          systemPrompt:
+            "你是一个专业的编程助手。你可以帮助用户编写代码、调试程序、解释技术概念。请提供清晰、可运行的代码示例，并附带必要的注释。",
+          avatar: "💻",
+          model: "",
+          isBuiltIn: true,
+          isActive: true,
+          sortOrder: 4,
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        },
+        {
+          id: "summarizer",
+          name: "摘要助手",
+          description: "快速总结文档内容",
+          systemPrompt:
+            "你是一个专业的摘要助手。请将用户提供的长文本总结成简洁的要点，保留关键信息和核心观点。",
+          avatar: "📝",
+          model: "",
+          isBuiltIn: true,
+          isActive: true,
+          sortOrder: 5,
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        },
+      ];
+
+      for (const assistant of defaultAssistants) {
+        try {
+          await db.aiAssistants.add(assistant);
+        } catch {
+          // 忽略已存在的助手
+        }
       }
     }
   } catch (error) {

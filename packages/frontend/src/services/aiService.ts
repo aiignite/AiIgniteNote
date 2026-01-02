@@ -135,7 +135,7 @@ export class AIService {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-api-key": this.config.apiKey,
+        "x-api-key": this.config.apiKey || "",
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify(requestBody),

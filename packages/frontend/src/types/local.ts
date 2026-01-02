@@ -9,6 +9,23 @@ export enum NoteFileType {
   MINDMAP = "mindmap",
 }
 
+// AI 助手配置（本地存储）
+export interface LocalAIAssistant {
+  id: string;
+  name: string;
+  description: string;
+  systemPrompt: string;
+  avatar?: string;
+  model: string; // 模型配置 ID，空字符串表示使用默认模型
+  temperature?: number;
+  maxTokens?: number;
+  isBuiltIn?: boolean;
+  isActive?: boolean;
+  sortOrder?: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
 export interface LocalNote {
   id: string;
   title: string;
@@ -26,7 +43,14 @@ export interface LocalNote {
     drawioData?: string;
     drawioThumbnail?: string;
     mindmapData?: string;
-    mindmapLayout?: "mindmap" | "organization" | "tree";
+    mindmapLayout?:
+      | "mindMap"
+      | "logicalStructure"
+      | "organizationStructure"
+      | "catalogOrganization"
+      | "fishbone"
+      | "timeline"
+      | "verticalTimeline";
     customConfig?: Record<string, any>;
   };
   // 同步相关字段
@@ -95,5 +119,16 @@ export function toLocalCategory(serverCategory: any): LocalCategory {
     color: serverCategory.color,
     sortOrder: serverCategory.sortOrder,
     createdAt: new Date(serverCategory.createdAt).getTime(),
+  };
+}
+
+// 从服务端 Tag 转换为本地 Tag
+export function toLocalTag(serverTag: any): LocalTag {
+  return {
+    id: serverTag.id,
+    name: serverTag.name,
+    color: serverTag.color,
+    createdAt: new Date(serverTag.createdAt).getTime(),
+    updatedAt: new Date(serverTag.updatedAt).getTime(),
   };
 }

@@ -9,7 +9,6 @@ import React, {
 import { Button, Drawer } from "antd";
 import { CloseOutlined, ThunderboltOutlined } from "@ant-design/icons";
 import ChatInterface from "./ChatInterface";
-import QuickActions from "./QuickActions";
 import { useAIStore } from "../../store/aiStore";
 import styled, { keyframes } from "styled-components";
 import {
@@ -243,7 +242,6 @@ function AIAssistantSidebar(
         }}
       >
         <SidebarContent>
-          <QuickActions />
           <ChatInterface />
         </SidebarContent>
       </Drawer>
@@ -289,7 +287,6 @@ function AIAssistantSidebar(
 
         {/* 内容 */}
         <SidebarContent>
-          <QuickActions />
           <ChatInterface />
         </SidebarContent>
       </SidebarContainer>
