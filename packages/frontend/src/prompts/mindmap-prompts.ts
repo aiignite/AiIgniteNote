@@ -250,9 +250,10 @@ export function validateMindMapJSON(json: any): {
   }
 
   // 返回规范化后的数据(去除可能的包装)
+  // simple-mind-map期望的是包含data字段的对象,如 {data: {text: "...", children: [...]}}
   return {
     valid: true,
-    normalized: actualData.data || actualData,
+    normalized: actualData.data ? actualData : actualData.data,
   };
 }
 

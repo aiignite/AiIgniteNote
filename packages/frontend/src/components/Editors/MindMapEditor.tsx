@@ -203,26 +203,34 @@ function MindMapEditor({
     // 解析已有的思维导图数据
     let initialData = defaultMindData.root;
     try {
+      let parsedData = null;
+
       if (metadata?.mindmapData) {
-        const parsed = JSON.parse(metadata.mindmapData);
-        // 验证并规范化数据
-        const validation = validateMindMapJSON(parsed);
-        if (validation.valid) {
-          initialData = validation.normalized || parsed;
-        } else {
-          console.warn("思维导图数据格式验证失败:", validation.error);
-          initialData = defaultMindData.root;
-        }
+        parsedData = JSON.parse(metadata.mindmapData);
       } else if (content) {
-        const parsed = JSON.parse(content);
+        parsedData = JSON.parse(content);
+      }
+
+      if (parsedData) {
         // 验证并规范化数据
-        const validation = validateMindMapJSON(parsed);
-        if (validation.valid) {
-          initialData = validation.normalized || parsed;
+        const validation = validateMindMapJSON(parsedData);
+        console.log("[MindMapEditor] 数据验证结果:", validation);
+
+        if (validation.valid && validation.normalized) {
+          // 使用规范化后的数据
+          initialData = validation.normalized;
+          console.log(
+            "[MindMapEditor] 使用规范化数据加载思维导图:",
+            initialData,
+          );
         } else {
           console.warn("思维导图数据格式验证失败:", validation.error);
-          initialData = defaultMindData.root;
+          // 尝试直接使用(可能是旧格式)
+          initialData = parsedData;
+          console.log("[MindMapEditor] 尝试直接使用原始数据:", initialData);
         }
+      } else {
+        console.log("[MindMapEditor] 没有找到保存的数据,使用默认数据");
       }
     } catch (error) {
       console.error("解析思维导图数据失败:", error);
@@ -567,6 +575,7 @@ function MindMapEditor({
 
       // 使用规范化后的数据
       const normalizedData = validation.normalized || result.data;
+      console.log("[MindMapEditor] 从AI导入规范化后的数据:", normalizedData);
 
       // 更新思维导图
       mindMapRef.current?.setData(normalizedData);
@@ -627,6 +636,10 @@ function MindMapEditor({
 
       // 使用规范化后的数据
       const normalizedData = validation.normalized || jsonData;
+      console.log(
+        "[MindMapEditor] 从剪贴板导入规范化后的数据:",
+        normalizedData,
+      );
 
       // 更新思维导图
       mindMapRef.current?.setData(normalizedData);
