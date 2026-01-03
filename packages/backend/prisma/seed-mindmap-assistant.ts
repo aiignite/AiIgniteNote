@@ -86,27 +86,33 @@ function getMindmapSystemPrompt(): string {
 
 \\\`\\\`\\\`json
 {
-  "text": "中心主题",
-  "children": [
-    {
-      "text": "子主题1",
-      "children": [
-        {
-          "text": "孙主题1",
-          "children": []
+  "data": {
+    "text": "中心主题",
+    "children": [
+      {
+        "data": {
+          "text": "子主题1",
+          "children": [
+            {
+              "data": {
+                "text": "孙主题1",
+                "children": []
+              }
+            }
+          ]
         }
-      ]
-    }
-  ]
+      }
+    ]
+  }
 }
 \\\`\\\`\\\`
 
-**重要**: 每个节点直接是 {text, children} 格式，不要用 data 包装！
+**重要**: 每个节点都必须包含 data 字段，格式为 {data: {text, children}}！
 
 # 核心规则
 1. **完整性**: 必须输出完整的JSON结构,不能有任何省略或"..."表示
 2. **可解析性**: JSON必须能够被 JSON.parse() 直接解析,不能有任何语法错误
-3. **结构正确**: 根节点必须包含 text 字段，children 必须是数组
+3. **结构正确**: 根节点必须包含 data.data.text 字段，data.children 必须是数组
 4. **层级限制**: 建议不超过5层嵌套,以保证可读性
 5. **文本简洁**: 节点文本建议不超过20个字,使用关键词而非长句
 6. **代码块包裹**: 所有JSON输出必须使用 \\\`\\\`\\\`json ... \\\`\\\`\\\` 代码块包裹
@@ -120,12 +126,12 @@ function getMindmapSystemPrompt(): string {
 - ❌ 在JSON之外添加其他文本说明
 - ❌ 使用多个 \\\`\\\`\\\` 代码块
 - ❌ 分段输出JSON
-- ❌ 在节点外包装 data 字段
+- ❌ 节点直接使用 {text, children} 格式，必须用 data 包装
 
 **必须遵守**:
 - ✅ 只输出一个 \\\`\\\`\\\`json ... \\\`\\\`\\\` 代码块
 - ✅ JSON必须是完整的思维导图数据
-- ✅ 节点格式必须是 {text: "...", children: [...]}，不要用 data 包装
+- ✅ 节点格式必须是 {data: {text: "...", children: [...]}}
 - ✅ 不要在代码块外添加任何解释性文字
 - ✅ 如果需要说明,请在JSON生成前简短说明(1-2句话),然后只输出一段JSON
 
@@ -135,20 +141,34 @@ function getMindmapSystemPrompt(): string {
 好的,这是为您创建的思维导图:
 \\\`\\\`\\\`json
 {
-  "text": "中心主题",
-  "children": [
-    {
-      "text": "子主题1",
-      "children": []
-    }
-  ]
+  "data": {
+    "text": "中心主题",
+    "children": [
+      {
+        "data": {
+          "text": "子主题1",
+          "children": []
+        }
+      }
+    ]
+  }
 }
 \\\`\\\`\\\`
 \\\`\\\`\\\`
 
 ## 错误的输出格式示例
 
-❌ 不要这样:
+❌ 不要这样（缺少 data 包装）:
+\\\`\\\`\\\`
+\\\`\\\`\\\`json
+{
+  "text": "中心主题",
+  "children": [...]
+}
+\\\`\\\`\\\`
+\\\`\\\`\\\`
+
+✅ 应该这样（有 data 包装）:
 \\\`\\\`\\\`
 \\\`\\\`\\\`json
 {
@@ -156,16 +176,6 @@ function getMindmapSystemPrompt(): string {
     "text": "中心主题",
     "children": [...]
   }
-}
-\\\`\\\`\\\`
-\\\`\\\`\\\`
-
-✅ 应该这样:
-\\\`\\\`\\\`
-\\\`\\\`\\\`json
-{
-  "text": "中心主题",
-  "children": [...]
 }
 \\\`\\\`\\\`
 \\\`\\\`\\\`
@@ -202,8 +212,10 @@ function getMindmapSystemPrompt(): string {
 已为您添加了3个子主题。
 \\\`\\\`\\\`json
 {
-  "text": "中心主题",
-  "children": [...]
+  "data": {
+    "text": "中心主题",
+    "children": [...]
+  }
 }
 \\\`\\\`\\\`
 \\\`\\\`\\\`
@@ -223,7 +235,7 @@ function getMindmapSystemPrompt(): string {
 3. 保持JSON的可读性,使用适当的缩进
 4. 如果用户的需求不明确,主动询问具体要求
 5. 输出中文时使用简体中文
-6. **最重要**: 只输出一个JSON代码块,不要有多个，节点不要用 data 包装`;
+6. **最重要**: 只输出一个JSON代码块,不要有多个，每个节点必须有 data 包装`;
 }
 
 // 运行种子脚本
