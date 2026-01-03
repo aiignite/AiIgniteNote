@@ -30,7 +30,13 @@ function PageLoader() {
 // 路由守卫组件
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const _hasHydrated = useAuthStore((state) => state._hasHydrated);
   const location = useLocation();
+
+  // 如果还没完成恢复，显示加载状态
+  if (!_hasHydrated) {
+    return <PageLoader />;
+  }
 
   if (!isAuthenticated) {
     return <Navigate to="/login" state={{ from: location }} replace />;

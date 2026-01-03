@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
+import { persist, createJSONStorage } from "zustand/middleware";
 import { apiClient } from "../lib/api/client";
 import { authApi } from "../lib/api/auth";
 
@@ -20,6 +20,7 @@ interface AuthState {
   refreshToken: string | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  _hasHydrated: boolean; // 标记是否已完成从存储的恢复
 
   // Actions
   login: (email: string, password: string) => Promise<void>;
@@ -33,6 +34,7 @@ interface AuthState {
   refreshUser: () => Promise<void>;
   updateUser: (data: Partial<User>) => Promise<void>;
   setTokens: (accessToken: string, refreshToken: string) => void;
+  _setHasHydrated: (state: boolean) => void;
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -43,6 +45,7 @@ export const useAuthStore = create<AuthState>()(
       refreshToken: null,
       isAuthenticated: false,
       isLoading: false,
+      _hasHydrated: false,
 
       login: async (email: string, password: string) => {
         set({ isLoading: true });
@@ -141,6 +144,12 @@ export const useAuthStore = create<AuthState>()(
           isAuthenticated: true,
         });
       },
+
+      _setHasHydrated: (state: boolean) => {
+        set({
+          _hasHydrated: state,
+        });
+      },
     }),
     {
       name: "auth-storage",
@@ -150,6 +159,10 @@ export const useAuthStore = create<AuthState>()(
         user: state.user,
         isAuthenticated: state.isAuthenticated,
       }),
+      onRehydrateStorage: () => (state) => {
+        console.log("auth-storage 已恢复, state:", state);
+        state?._setHasHydrated(true);
+      },
     },
   ),
 );
