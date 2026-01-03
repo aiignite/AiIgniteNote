@@ -23,11 +23,7 @@ import MindMapSelect from "simple-mind-map/src/plugins/Select.js";
 import MindMapDrag from "simple-mind-map/src/plugins/Drag.js";
 import type { EditorProps } from "./BaseEditor";
 import { useAIStore } from "../../store/aiStore";
-import {
-  SelectedContent,
-  SelectionHelper,
-  MindMapNodeData,
-} from "../../types/selection";
+import type { MindMapNodeData } from "../../types/selection";
 import {
   validateMindMapJSON,
   extractMindMapJSONFromResponse,
@@ -101,7 +97,14 @@ const TitleInput = styled(Input)`
 `;
 
 // 默认思维导图数据
-const defaultMindData = {
+const defaultMindData: {
+  root: {
+    data: {
+      text: string;
+      children: any[];
+    };
+  };
+} = {
   root: {
     data: {
       text: "中心主题",
@@ -183,8 +186,7 @@ function MindMapEditor({
   const containerRef = useRef<HTMLDivElement>(null);
   const mindMapRef = useRef<any>(null);
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
-  const { setSelectedContent, sendMindmapToAI, importMindmapFromClipboard } =
-    useAIStore();
+  const { sendMindmapToAI, importMindmapFromClipboard } = useAIStore();
 
   // 从 metadata 中读取保存的布局和主题,如果没有则使用默认值
   const [currentLayout, setCurrentLayout] = useState(
@@ -201,7 +203,7 @@ function MindMapEditor({
     if (!containerRef.current) return;
 
     // 解析已有的思维导图数据
-    let initialData = defaultMindData.root;
+    let initialData: any = defaultMindData.root;
     try {
       let parsedData = null;
 
