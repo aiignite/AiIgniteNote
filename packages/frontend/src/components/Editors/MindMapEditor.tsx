@@ -221,16 +221,16 @@ function MindMapEditor({
 
         if (validation.valid && validation.normalized) {
           // 使用规范化后的数据
+          // validateMindMapJSON 已经将数据转换为 {text, children} 格式
           initialData = validation.normalized;
           console.log(
             "[MindMapEditor] 使用规范化数据加载思维导图:",
             initialData,
           );
-          console.log("[MindMapEditor] initialData.root:", initialData.root);
-          console.log("[MindMapEditor] initialData.data:", initialData.data);
+          console.log("[MindMapEditor] initialData.text:", initialData.text);
           console.log(
-            "[MindMapEditor] initialData.data?.children 数量:",
-            initialData.data?.children?.length,
+            "[MindMapEditor] initialData.children 数量:",
+            initialData.children?.length,
           );
         } else {
           console.warn("思维导图数据格式验证失败:", validation.error);
@@ -247,17 +247,21 @@ function MindMapEditor({
     }
 
     // 创建思维导图实例
-    // 注意：initialData 可能是 {data: {...}} 格式（从验证函数返回）
-    // 或者是 {root: {data: {...}}} 格式（默认格式）
-    // simple-mind-map 的构造函数期望 data 参数直接是节点数据对象
-    const dataForConstructor = initialData.root
-      ? initialData.root
-      : initialData;
-    console.log("[MindMapEditor] 传入构造函数的数据:", dataForConstructor);
+    // validateMindMapJSON 已经将数据转换为 simple-mind-map 期望的格式: {text, children}
+    // 所以这里直接使用 initialData
+    console.log("[MindMapEditor] 传入构造函数的数据:", initialData);
+    console.log(
+      "[MindMapEditor] 构造函数数据格式检查 - text:",
+      initialData.text,
+    );
+    console.log(
+      "[MindMapEditor] 构造函数数据格式检查 - children 数量:",
+      initialData.children?.length,
+    );
 
     const instance = new MindMap({
       el: containerRef.current,
-      data: dataForConstructor,
+      data: initialData,
       layout: currentLayout as any,
       theme: currentTheme,
       // 画布操作
@@ -597,46 +601,15 @@ function MindMapEditor({
       // 使用规范化后的数据
       const normalizedData = validation.normalized || result.data;
       console.log("[MindMapEditor] 规范化后的数据:", normalizedData);
-      console.log("[MindMapEditor] normalizedData.data:", normalizedData.data);
+      console.log("[MindMapEditor] normalizedData.text:", normalizedData.text);
       console.log(
-        "[MindMapEditor] normalizedData.data?.children 数量:",
-        normalizedData.data?.children?.length,
+        "[MindMapEditor] normalizedData.children 数量:",
+        normalizedData.children?.length,
       );
 
-      // 更新思维导图 - 注意 setData 的数据格式
-      // simple-mind-map 的 setData 期望的是纯节点数据对象，不需要包装
-      let dataToSet;
-      if (normalizedData.data && typeof normalizedData.data === "object") {
-        // 这是 {data: {...}} 格式，提取 data 部分
-        dataToSet = normalizedData.data;
-        console.log(
-          "[MindMapEditor] 从AI导入 - 从 {data: {...}} 格式提取 data:",
-          dataToSet,
-        );
-      } else if (normalizedData.root) {
-        // 这是 {root: {...}} 格式，提取 root 部分
-        dataToSet = normalizedData.root;
-        console.log(
-          "[MindMapEditor] 从AI导入 - 从 {root: {...}} 格式提取 root:",
-          dataToSet,
-        );
-      } else {
-        // 直接是节点数据
-        dataToSet = normalizedData;
-        console.log("[MindMapEditor] 从AI导入 - 直接使用节点数据:", dataToSet);
-      }
-
-      console.log(
-        "[MindMapEditor] 从AI导入 - 最终传入 setData 的数据:",
-        dataToSet,
-      );
-      console.log("[MindMapEditor] 从AI导入 - dataToSet.text:", dataToSet.text);
-      console.log(
-        "[MindMapEditor] 从AI导入 - dataToSet.children 数量:",
-        dataToSet.children?.length,
-      );
-
-      mindMapRef.current?.setData(dataToSet);
+      // 更新思维导图
+      // validateMindMapJSON 已经将数据转换为 simple-mind-map 期望的格式: {text, children}
+      mindMapRef.current?.setData(normalizedData);
 
       // 保存到笔记
       const jsonData = JSON.stringify(result.data, null, 2);
@@ -700,47 +673,18 @@ function MindMapEditor({
       // 使用规范化后的数据
       const normalizedData = validation.normalized || jsonData;
       console.log("[MindMapEditor] 规范化后的数据:", normalizedData);
-      console.log("[MindMapEditor] normalizedData.data:", normalizedData.data);
+      console.log("[MindMapEditor] normalizedData.text:", normalizedData.text);
       console.log(
-        "[MindMapEditor] normalizedData.data?.children 数量:",
-        normalizedData.data?.children?.length,
+        "[MindMapEditor] normalizedData.children 数量:",
+        normalizedData.children?.length,
       );
 
-      // 更新思维导图 - 注意 setData 的数据格式
-      // simple-mind-map 的 setData 期望的是纯节点数据对象，不需要包装
-      // 如果 normalizedData 是 {data: {...}} 格式，需要提取 data 部分传给 setData
-      // 如果 normalizedData 本身就是节点数据对象（有 text 和 children），直接使用
-      let dataToSet;
-      if (normalizedData.data && typeof normalizedData.data === "object") {
-        // 这是 {data: {...}} 格式，提取 data 部分
-        dataToSet = normalizedData.data;
-        console.log(
-          "[MindMapEditor] 从 {data: {...}} 格式提取 data:",
-          dataToSet,
-        );
-      } else if (normalizedData.root) {
-        // 这是 {root: {...}} 格式，提取 root 部分
-        dataToSet = normalizedData.root;
-        console.log(
-          "[MindMapEditor] 从 {root: {...}} 格式提取 root:",
-          dataToSet,
-        );
-      } else {
-        // 直接是节点数据
-        dataToSet = normalizedData;
-        console.log("[MindMapEditor] 直接使用节点数据:", dataToSet);
-      }
-
-      console.log("[MindMapEditor] 最终传入 setData 的数据:", dataToSet);
-      console.log("[MindMapEditor] dataToSet.text:", dataToSet.text);
-      console.log(
-        "[MindMapEditor] dataToSet.children 数量:",
-        dataToSet.children?.length,
-      );
-
+      // 更新思维导图
+      // validateMindMapJSON 已经将数据转换为 simple-mind-map 期望的格式: {text, children}
+      // 所以这里直接使用 normalizedData 即可
       // 使用 setData 方法
       if (mindMapRef.current) {
-        mindMapRef.current.setData(dataToSet);
+        mindMapRef.current.setData(normalizedData);
 
         // 强制重新渲染
         setTimeout(() => {

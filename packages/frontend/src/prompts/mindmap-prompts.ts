@@ -214,15 +214,44 @@ export function formatMindMapForAI(data: MindMapClipboardData): string {
 }
 
 /**
+ * 递归转换思维导图节点数据
+ * 将 AI 生成的格式 (每个节点都有 data 包装) 转换为 simple-mind-map 期望的格式
+ * @param node - 节点数据，可能是 {data: {...}} 或直接是 {...}
+ * @returns 转换后的节点数据 {text, children}
+ */
+function convertMindMapNode(node: any): any {
+  // 如果节点有 data 属性，提取 data 的内容
+  const actualNode = node.data || node;
+
+  // 创建新节点
+  const converted: any = {
+    text: actualNode.text || "未命名",
+  };
+
+  // 递归转换子节点
+  if (actualNode.children && Array.isArray(actualNode.children)) {
+    converted.children = actualNode.children.map((child: any) =>
+      convertMindMapNode(child),
+    );
+  } else {
+    converted.children = [];
+  }
+
+  return converted;
+}
+
+/**
  * 验证思维导图JSON结构
  * 支持两种格式:
  * 1. 直接格式: { "data": { "text": "...", "children": [...] } }
  * 2. 包装格式: { "root": { "data": { "text": "...", "children": [...] } } }
+ *
+ * 并自动转换为 simple-mind-map 期望的格式: { text: "...", children: [...] }
  */
 export function validateMindMapJSON(json: any): {
   valid: boolean;
   error?: string;
-  normalized?: any; // 返回规范化后的数据
+  normalized?: any; // 返回规范化后的数据，格式为 {text, children}
 } {
   if (!json || typeof json !== "object") {
     return { valid: false, error: "数据不是有效的对象" };
@@ -249,11 +278,14 @@ export function validateMindMapJSON(json: any): {
     }
   }
 
-  // 返回规范化后的数据(去除可能的包装)
-  // simple-mind-map期望的是包含data字段的对象,如 {data: {text: "...", children: [...]}}
+  // 转换为 simple-mind-map 期望的格式
+  // 从 {data: {text, children}} 转换为 {text, children}
+  const converted = convertMindMapNode(actualData);
+
+  // 返回转换后的数据
   return {
     valid: true,
-    normalized: actualData, // 直接返回 {data: {...}} 格式
+    normalized: converted, // 返回 {text: "...", children: [...]} 格式
   };
 }
 
