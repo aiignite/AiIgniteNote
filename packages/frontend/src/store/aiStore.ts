@@ -554,13 +554,7 @@ export const useAIStore = create<AIStore>((set, get) => ({
   sendMessage: async (conversationId, content, signal) => {
     set({ isLoading: true, isStreaming: true, currentResponse: "" });
 
-    // 添加用户消息
-    await get().addMessage(conversationId, {
-      role: "user",
-      content,
-    });
-
-    // 获取对话历史
+    // 获取对话历史(添加用户消息之前)
     const conversation = get().conversations.find(
       (c) => c.id === conversationId,
     );
@@ -568,15 +562,51 @@ export const useAIStore = create<AIStore>((set, get) => ({
       throw new Error("对话不存在");
     }
 
+    // 检查是否是思维导图笔记
+    const isMindMap =
+      conversation.noteId &&
+      (await db.notes
+        .get(conversation.noteId)
+        .then((note) => note?.fileType === "mindmap")
+        .catch(() => false));
+
     // 获取当前助手的系统提示词
     const currentAssistant = get().currentAssistant;
 
-    // 获取更新后的对话（包含刚添加的用户消息）
+    // 使用上下文管理服务构建消息（思维导图模式会自动注入上下文和用户消息）
+    const messages = await buildMessagesForAI(
+      conversation,
+      currentAssistant.systemPrompt,
+      {},
+      signal,
+    );
+
+    // 对于非思维导图模式,需要手动添加用户消息
+    // 思维导图模式下,buildMindMapContext已经包含了用户消息
+    const isMindMapMode = messages.some(
+      (m) => m.role === "system" && m.content.includes("当前思维导图数据"),
+    );
+
+    if (!isMindMapMode) {
+      // 非思维导图模式: 添加用户消息到对话
+      await get().addMessage(conversationId, {
+        role: "user",
+        content,
+      });
+    } else {
+      // 思维导图模式: 添加用户消息到对话(用于历史记录)
+      await get().addMessage(conversationId, {
+        role: "user",
+        content,
+      });
+    }
+
+    // 打印 token 使用情况（开发调试）
+    // 获取最新的对话(包含刚添加的用户消息)
     const updatedConversation = get().conversations.find(
       (c) => c.id === conversationId,
     )!;
 
-    // 打印 token 使用情况（开发调试）
     const tokenUsage = getTokenUsage(
       updatedConversation,
       currentAssistant.systemPrompt,

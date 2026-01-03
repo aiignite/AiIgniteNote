@@ -1,5 +1,6 @@
 import { AIMessage, AIConversation } from "../../types";
 import { aiApi, ChatMessage } from "./ai";
+import { isMindMapNote, buildMindMapContext } from "./mindmapContextBuilder";
 
 // ============================================
 // 配置常量
@@ -45,7 +46,9 @@ export function estimateTokens(text: string): number {
   if (charCount === 0) return 0;
 
   // 统计中文字符数量（包括中文标点）
-  const chineseChars = (cleaned.match(/[\u4e00-\u9fa5\u3000-\u303f\uff00-\uffef]/g) || []).length;
+  const chineseChars = (
+    cleaned.match(/[\u4e00-\u9fa5\u3000-\u303f\uff00-\uffef]/g) || []
+  ).length;
   const chineseRatio = chineseChars / charCount;
 
   // 根据中英文比例选择估算系数
@@ -178,7 +181,9 @@ function generateSimpleSummary(messages: AIMessage[]): string {
     if (msg.role === "user") {
       // 提取用户问题（截取前 50 字）
       const content = msg.content.slice(0, 50);
-      summaries.push(`用户询问：${content}${msg.content.length > 50 ? "..." : ""}`);
+      summaries.push(
+        `用户询问：${content}${msg.content.length > 50 ? "..." : ""}`,
+      );
     }
   }
 
@@ -215,6 +220,35 @@ export async function buildMessagesForAI(
   config: ContextManagerConfig = {},
   signal?: AbortSignal,
 ): Promise<ChatMessage[]> {
+  // 检查是否是思维导图笔记,使用专用上下文构建器
+  const isMindMap = await isMindMapNote(conversation.noteId);
+
+  if (isMindMap && conversation.noteId) {
+    console.log("[ContextManager] 检测到思维导图笔记,使用专用上下文构建");
+
+    // 获取最后一条用户消息
+    const lastMessage = conversation.messages[conversation.messages.length - 1];
+    const userMessage = lastMessage?.role === "user" ? lastMessage.content : "";
+
+    const result = await buildMindMapContext(
+      conversation.noteId,
+      conversation,
+      systemPrompt,
+      userMessage,
+      config.maxTokens || TOKEN_CONFIG.DEFAULT_MAX_TOKENS,
+    );
+
+    console.log("[ContextManager] 思维导图上下文构建完成:", {
+      strategy: result.strategy,
+      nodeCount: result.info.nodeCount,
+      jsonTokens: result.info.jsonTokens,
+      messagesCount: result.messages.length,
+    });
+
+    return result.messages;
+  }
+
+  // 原有的普通对话逻辑
   const {
     maxTokens = TOKEN_CONFIG.DEFAULT_MAX_TOKENS,
     compressThreshold = TOKEN_CONFIG.COMPRESS_THRESHOLD,
@@ -226,20 +260,28 @@ export async function buildMessagesForAI(
 
   // 估算当前消息列表的 token 数（不含 system prompt）
   const messagesTokens = estimateMessagesTokens(messages);
-  const totalTokens = messagesTokens + estimateTokens(systemPrompt) + TOKEN_CONFIG.SYSTEM_PROMPT_RESERVE;
+  const totalTokens =
+    messagesTokens +
+    estimateTokens(systemPrompt) +
+    TOKEN_CONFIG.SYSTEM_PROMPT_RESERVE;
 
   // 如果未超过阈值，直接返回
   if (totalTokens <= maxTokens * compressThreshold) {
     return buildFinalMessages(messages, systemPrompt, contextSummary);
   }
 
-  console.log(`[上下文管理] Token 数量 ${totalTokens} 超过阈值 ${maxTokens * compressThreshold}，需要压缩`);
+  console.log(
+    `[上下文管理] Token 数量 ${totalTokens} 超过阈值 ${maxTokens * compressThreshold}，需要压缩`,
+  );
 
   // 需要压缩：检查是否有现有摘要
   let newSummary = contextSummary || "";
 
   // 计算需要压缩的消息数量
-  const messagesToCompressCount = Math.max(0, messages.length - keepRecentMessages);
+  const messagesToCompressCount = Math.max(
+    0,
+    messages.length - keepRecentMessages,
+  );
 
   if (messagesToCompressCount > 0) {
     const messagesToCompress = messages.slice(0, messagesToCompressCount);
@@ -329,7 +371,10 @@ function buildFinalMessages(
 /**
  * 获取对话的 token 使用情况
  */
-export function getTokenUsage(conversation: AIConversation, systemPrompt: string): {
+export function getTokenUsage(
+  conversation: AIConversation,
+  systemPrompt: string,
+): {
   messagesTokens: number;
   systemPromptTokens: number;
   totalTokens: number;
@@ -338,7 +383,8 @@ export function getTokenUsage(conversation: AIConversation, systemPrompt: string
 } {
   const maxTokens = TOKEN_CONFIG.DEFAULT_MAX_TOKENS;
   const messagesTokens = estimateMessagesTokens(conversation.messages);
-  const systemPromptTokens = estimateTokens(systemPrompt) + TOKEN_CONFIG.SYSTEM_PROMPT_RESERVE;
+  const systemPromptTokens =
+    estimateTokens(systemPrompt) + TOKEN_CONFIG.SYSTEM_PROMPT_RESERVE;
   const totalTokens = messagesTokens + systemPromptTokens;
 
   return {

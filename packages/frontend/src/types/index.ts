@@ -59,6 +59,15 @@ export interface AIConversation {
   contextSummary?: string;
   // 最近一次压缩的消息索引（之后的消息未被压缩）
   lastCompressedMessageIndex?: number;
+  // 思维导图专用上下文
+  mindmapContext?: {
+    // 最后一次同步的数据哈希
+    lastDataHash: string;
+    // 最后同步时间
+    lastSyncTime: number;
+    // 结构摘要（大文件时使用）
+    structureSummary?: string;
+  };
 }
 
 // 模型配置相关类型（本地扩展，用于 IndexedDB）
