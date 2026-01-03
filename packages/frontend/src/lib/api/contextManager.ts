@@ -202,6 +202,7 @@ export interface ContextManagerConfig {
   compressThreshold?: number; // 触发压缩的阈值（0-1）
   compressTarget?: number; // 压缩后目标占比（0-1）
   keepRecentMessages?: number; // 压缩后保留的最近消息数
+  currentUserMessage?: string; // 当前正在发送的用户消息（用于思维导图上下文）
 }
 
 /**
@@ -221,14 +222,26 @@ export async function buildMessagesForAI(
   signal?: AbortSignal,
 ): Promise<ChatMessage[]> {
   // 检查是否是思维导图笔记,使用专用上下文构建器
+  console.log("[ContextManager] buildMessagesForAI 被调用");
+  console.log("[ContextManager] conversation.noteId:", conversation.noteId);
+
   const isMindMap = await isMindMapNote(conversation.noteId);
 
-  if (isMindMap && conversation.noteId) {
-    console.log("[ContextManager] 检测到思维导图笔记,使用专用上下文构建");
+  console.log("[ContextManager] isMindMap 检测结果:", isMindMap);
 
-    // 获取最后一条用户消息
-    const lastMessage = conversation.messages[conversation.messages.length - 1];
-    const userMessage = lastMessage?.role === "user" ? lastMessage.content : "";
+  if (isMindMap && conversation.noteId) {
+    console.log("[ContextManager] ✅ 检测到思维导图笔记,使用专用上下文构建");
+
+    // 使用传入的当前用户消息，或从对话历史中获取
+    const userMessage =
+      config.currentUserMessage ||
+      (() => {
+        const lastMessage =
+          conversation.messages[conversation.messages.length - 1];
+        return lastMessage?.role === "user" ? lastMessage.content : "";
+      })();
+
+    console.log("[ContextManager] 使用的用户消息:", userMessage);
 
     const result = await buildMindMapContext(
       conversation.noteId,

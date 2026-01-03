@@ -11,35 +11,40 @@ export const MINDMAP_ASSISTANT_PROMPT = `# 角色定义
 \`\`\`json
 {
   "data": {
-    "text": "中心主题",
-    "children": [
-      {
-        "data": {
-          "text": "子主题1",
-          "children": [
-            {
-              "data": {
-                "text": "孙主题1",
-                "children": []
-              }
-            }
-          ]
+    "text": "中心主题"
+  },
+  "children": [
+    {
+      "data": {
+        "text": "子主题1"
+      },
+      "children": [
+        {
+          "data": {
+            "text": "孙主题1"
+          },
+          "children": []
         }
-      }
-    ]
-  }
+      ]
+    }
+  ]
 }
 \`\`\`
 
-**重要**: 每个节点都必须包含 data 字段，格式为 {data: {text, children}}！
+**关键结构说明**:
+- 每个节点有两个主要属性: \\\`data\\\` (对象) 和 \\\`children\\\` (数组)
+- \\\`data\\\` 包含节点的文本和样式: \\\`data: {text: "..."}\\\`
+- \\\`children\\\` 包含子节点数组，与 \\\`data\\\` **平级**，不在 \\\`data\\\` 内部
+- **错误示例**: \\\`{data: {text: "...", children: [...]}}\\\` ← children 不应该在 data 内部
+- **正确示例**: \\\`{data: {text: "..."}, children: [...]}\\\` ← children 与 data 平级
 
 # 核心规则
 1. **完整性**: 必须输出完整的JSON结构,不能有任何省略或"..."表示
 2. **可解析性**: JSON必须能够被 JSON.parse() 直接解析,不能有任何语法错误
-3. **结构正确**: 根节点必须包含 data.data.text 字段，data.children 必须是数组
+3. **结构正确**: 每个节点必须是 \\\`{data: {text: "..."}, children: [...]}\\\` 格式
 4. **层级限制**: 建议不超过5层嵌套,以保证可读性
 5. **文本简洁**: 节点文本建议不超过20个字,使用关键词而非长句
-6. **代码块包裹**: 所有JSON输出必须使用 \`\`\`json ... \`\`\` 代码块包裹
+6. **代码块包裹**: 所有JSON输出必须使用 \\\`\\\`\\\`json ... \\\`\\\`\\\` 代码块包裹
 
 # ⚠️ 重要输出规范
 
@@ -48,14 +53,16 @@ export const MINDMAP_ASSISTANT_PROMPT = `# 角色定义
 **绝对禁止**:
 - ❌ 输出多个JSON代码块
 - ❌ 在JSON之外添加其他文本说明
-- ❌ 使用多个 \`\`\` 代码块
+- ❌ 使用多个 \\\`\\\`\\\` 代码块
 - ❌ 分段输出JSON
-- ❌ 节点直接使用 {text, children} 格式，必须用 data 包装
+- ❌ 节点使用 \\\`{text, children}\\\` 格式（缺少 data 包装）
+- ❌ 将 children 放在 data 内部: \\\`{data: {text, children}}\\\`
 
 **必须遵守**:
-- ✅ 只输出一个 \`\`\`json ... \`\`\` 代码块
+- ✅ 只输出一个 \\\`\\\`\\\`json ... \\\`\\\`\\\` 代码块
 - ✅ JSON必须是完整的思维导图数据
-- ✅ 节点格式必须是 {data: {text: "...", children: [...]}}
+- ✅ 节点格式必须是 \\\`{data: {text: "..."}, children: [...]}\\\`
+- ✅ children 与 data 平级，不在 data 内部
 - ✅ 不要在代码块外添加任何解释性文字
 - ✅ 如果需要说明,请在JSON生成前简短说明(1-2句话),然后只输出一段JSON
 
@@ -66,43 +73,45 @@ export const MINDMAP_ASSISTANT_PROMPT = `# 角色定义
 \`\`\`json
 {
   "data": {
-    "text": "中心主题",
-    "children": [
-      {
-        "data": {
-          "text": "子主题1",
-          "children": []
-        }
-      }
-    ]
-  }
+    "text": "中心主题"
+  },
+  "children": [
+    {
+      "data": {
+        "text": "子主题1"
+      },
+      "children": []
+    }
+  ]
 }
 \`\`\`
 \`\`\`
 
 ## 错误的输出格式示例
 
-❌ 不要这样（缺少 data 包装）:
-\`\`\`
-\`\`\`json
+❌ 不要这样（children 在 data 内部）:
+\\\`
+\\\`\\\`\\\`json
 {
-  "text": "中心主题",
-  "children": [...]
-}
-\`\`\`
-\`\`\`
-
-✅ 应该这样（有 data 包装）:
-\`\`\`
-\`\`\`json
-{
-  "data": {
-    "text": "中心主题",
-    "children": [...]
+  \\\`data\\\`: {
+    \\\`text\\\`: \\\\"中心主题\\\"",
+    \\\`children\\\`: [...]
   }
 }
-\`\`\`
-\`\`\`
+\\\`\\\`\\\`
+\\\`
+
+✅ 应该这样（children 与 data 平级）:
+\\\`
+\\\`\\\`\\\`json
+{
+  \\\`data\\\`: {
+    \\\`text\\\`: \\\\"中心主题\\\\""
+  },
+  \\\`children\\\`: [...]
+}
+\\\`\\\`\\\`
+\\\`
 
 # 工作模式
 
@@ -213,29 +222,65 @@ export function extractMindMapData(
 export function formatMindMapForAI(data: MindMapClipboardData): string {
   let prompt = "";
 
-  // 添加完整JSON
-  prompt += `## 完整思维导图数据\n\`\`\`json\n${JSON.stringify(data.fullData, null, 2)}\n\`\`\`\n\n`;
-
-  // 添加选中节点信息
+  // 添加选中节点信息（用于填充到输入框）
   if (data.selectedData && data.selectedData.length > 0) {
-    prompt += `## 选中的节点\n`;
-    prompt += `已选中 ${data.selectedData.length} 个节点\n\n`;
+    prompt += `我选中了以下 ${data.selectedData.length} 个节点:\n\n`;
 
     if (data.selectedPath) {
-      prompt += `节点路径: ${data.selectedPath.join(" → ")}\n\n`;
+      prompt += `路径: ${data.selectedPath.join(" → ")}\n\n`;
     }
 
-    prompt += `选中节点数据:\n\`\`\`json\n${JSON.stringify(data.selectedData, null, 2)}\n\`\`\`\n\n`;
+    // 列出选中的节点
+    data.selectedData.forEach((node: any, index: number) => {
+      const indent = "  ".repeat(node.level || 0);
+      prompt += `${indent}${index + 1}. ${node.text}\n`;
+    });
+
+    prompt += "\n请帮我处理这些节点：";
+  } else {
+    // 没有选中节点时的降级方案
+    prompt += `## 完整思维导图数据\n\`\`\`json\n${JSON.stringify(data.fullData, null, 2)}\n\`\`\`\n\n`;
   }
 
   return prompt;
 }
 
 /**
+ * 递归修复思维导图节点的 children 位置
+ * 将 data 内部的 children 移到与 data 平级的位置
+ * @param node - 节点数据
+ * @returns 修复后的节点数据
+ */
+function fixChildrenStructure(node: any): any {
+  const result: any = {
+    data: { ...node.data },
+  };
+
+  // 如果 data 内部有 children，移到外层
+  if (result.data.children) {
+    result.children = result.data.children;
+    delete result.data.children;
+  } else if (node.children) {
+    result.children = node.children;
+  } else {
+    result.children = [];
+  }
+
+  // 递归修复子节点
+  if (result.children && Array.isArray(result.children)) {
+    result.children = result.children.map((child: any) =>
+      fixChildrenStructure(child),
+    );
+  }
+
+  return result;
+}
+
+/**
  * 递归转换思维导图节点数据
- * 将简单格式 {text, children} 转换为 simple-mind-map 期望的格式 {data: {text, children}}
+ * 将简化格式 {text, children} 转换为 simple-mind-map 期望的格式 {data: {text, ...}, children: [...]}
  * @param node - 节点数据，格式为 {text, children}
- * @returns 转换后的节点数据 {data: {text, children}}
+ * @returns 转换后的节点数据 {data: {text, ...}, children: [...]}
  */
 function convertMindMapNode(node: any): any {
   // 创建 simple-mind-map 期望的格式
@@ -243,6 +288,7 @@ function convertMindMapNode(node: any): any {
     data: {
       text: node.text || "未命名",
     },
+    children: [],
   };
 
   // 递归转换子节点
@@ -251,11 +297,9 @@ function convertMindMapNode(node: any): any {
     Array.isArray(node.children) &&
     node.children.length > 0
   ) {
-    converted.data.children = node.children.map((child: any) =>
+    converted.children = node.children.map((child: any) =>
       convertMindMapNode(child),
     );
-  } else {
-    converted.data.children = [];
   }
 
   return converted;
@@ -289,19 +333,40 @@ export function validateMindMapJSON(json: any): {
 
   // 检查是否是 simple-mind-map 原生格式 (有 data 包装)
   if (actualData.data && typeof actualData.data === "object") {
-    // 已经是正确的格式，验证并直接返回
     if (!actualData.data.text || typeof actualData.data.text !== "string") {
       return { valid: false, error: "缺少必需的 data.text 字段(中心主题)" };
     }
 
-    if (actualData.data.children && !Array.isArray(actualData.data.children)) {
+    // 检查 children 位置：正确格式是 children 与 data 平级
+    // 错误格式是 children 在 data 内部（AI 可能这样生成）
+    if (actualData.data.children && Array.isArray(actualData.data.children)) {
+      // children 在 data 内部，需要移到外层
+      console.log(
+        "[validateMindMapJSON] 检测到 children 在 data 内部，需要修复",
+      );
+      const fixed = {
+        data: { ...actualData.data },
+        children: actualData.data.children,
+      };
+      delete fixed.data.children; // 删除 data 内部的 children
+      return {
+        valid: true,
+        normalized: fixChildrenStructure(fixed), // 递归修复子节点
+      };
+    }
+
+    // 正确格式：children 与 data 平级
+    if (actualData.children && !Array.isArray(actualData.children)) {
       return { valid: false, error: "children 必须是数组" };
     }
 
     console.log("[validateMindMapJSON] 检测到 simple-mind-map 原生格式");
+    // 递归修复子节点结构
     return {
       valid: true,
-      normalized: actualData, // 直接返回 {data: {text, children}}
+      normalized: actualData.children
+        ? fixChildrenStructure(actualData)
+        : actualData,
     };
   }
 

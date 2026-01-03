@@ -38,11 +38,22 @@ const MINDMAP_CONTEXT_CONFIG = {
  * 检测是否是思维导图笔记
  */
 export async function isMindMapNote(noteId?: string): Promise<boolean> {
-  if (!noteId) return false;
+  console.log("[isMindMapNote] 检测笔记类型, noteId:", noteId);
+
+  if (!noteId) {
+    console.log("[isMindMapNote] ❌ noteId 为空,返回 false");
+    return false;
+  }
 
   try {
     const note = await db.notes.get(noteId);
-    return note?.fileType === "mindmap";
+    console.log("[isMindMapNote] 获取到笔记:", note);
+    console.log("[isMindMapNote] 笔记的 fileType:", note?.fileType);
+
+    const isMindMap = note?.fileType === "mindmap";
+    console.log("[isMindMapNote] 检测结果:", isMindMap);
+
+    return isMindMap;
   } catch (error) {
     console.error("[isMindMapNote] 检测失败:", error);
     return false;
@@ -55,11 +66,25 @@ export async function isMindMapNote(noteId?: string): Promise<boolean> {
 export async function getMindMapData(noteId: string): Promise<any | null> {
   try {
     const note = await db.notes.get(noteId);
-    if (!note?.metadata?.mindmapData) {
+    if (!note) {
+      console.warn("[getMindMapData] 笔记不存在:", noteId);
       return null;
     }
 
-    return JSON.parse(note.metadata.mindmapData);
+    // 优先从 metadata.mindmapData 获取
+    if (note.metadata?.mindmapData) {
+      console.log("[getMindMapData] 从 metadata.mindmapData 获取数据");
+      return JSON.parse(note.metadata.mindmapData);
+    }
+
+    // 降级：从 content 获取
+    if (note.content) {
+      console.log("[getMindMapData] 从 content 获取数据");
+      return JSON.parse(note.content);
+    }
+
+    console.warn("[getMindMapData] 未找到思维导图数据");
+    return null;
   } catch (error) {
     console.error("[getMindMapData] 获取失败:", error);
     return null;
@@ -106,12 +131,17 @@ export function getMaxDepth(data: any): number {
   if (!data || !data.data) return 0;
 
   const getDepth = (node: any, currentDepth: number = 0): number => {
-    if (!node.data || !node.data.children || !Array.isArray(node.data.children) || node.data.children.length === 0) {
+    if (
+      !node.data ||
+      !node.data.children ||
+      !Array.isArray(node.data.children) ||
+      node.data.children.length === 0
+    ) {
       return currentDepth;
     }
 
     return Math.max(
-      ...node.data.children.map(child => getDepth(child, currentDepth + 1))
+      ...node.data.children.map((child) => getDepth(child, currentDepth + 1)),
     );
   };
 
@@ -165,13 +195,15 @@ export async function buildMindMapContext(
     dataHash: string;
   };
 }> {
-  console.log("[MindMapContext] 开始构建思维导图上下文, noteId:", noteId);
+  console.log("[MindMapContext] 开始构建思维导图上下文");
+  console.log("[MindMapContext] noteId:", noteId);
+  console.log("[MindMapContext] userMessage:", userMessage);
 
   // 1. 获取最新思维导图数据
   const mindmapData = await getMindMapData(noteId);
 
   if (!mindmapData) {
-    console.warn("[MindMapContext] 未找到思维导图数据,使用普通模式");
+    console.warn("[MindMapContext] ❌ 未找到思维导图数据,使用降级方案");
     return buildFallbackContext(systemPrompt, userMessage, conversation);
   }
 
@@ -191,13 +223,36 @@ export async function buildMindMapContext(
   // 4. 根据大小选择策略
   if (jsonTokens < MINDMAP_CONTEXT_CONFIG.SMALL_FILE_THRESHOLD) {
     console.log("[MindMapContext] 使用小文件策略");
-    return buildSmallFileContext(mindmapData, jsonStr, jsonTokens, systemPrompt, userMessage, conversation, maxTokens, { nodeCount, depth, dataHash });
+    return buildSmallFileContext(
+      mindmapData,
+      jsonStr,
+      jsonTokens,
+      systemPrompt,
+      userMessage,
+      conversation,
+      maxTokens,
+      { nodeCount, depth, dataHash },
+    );
   } else if (jsonTokens < MINDMAP_CONTEXT_CONFIG.LARGE_FILE_THRESHOLD) {
     console.log("[MindMapContext] 使用大文件策略");
-    return buildLargeFileContext(mindmapData, jsonStr, jsonTokens, systemPrompt, userMessage, maxTokens, { nodeCount, depth, dataHash });
+    return buildLargeFileContext(
+      mindmapData,
+      jsonStr,
+      jsonTokens,
+      systemPrompt,
+      userMessage,
+      maxTokens,
+      { nodeCount, depth, dataHash },
+    );
   } else {
     console.log("[MindMapContext] 使用超大文件策略(摘要模式)");
-    return buildSummaryContext(mindmapData, systemPrompt, userMessage, maxTokens, { nodeCount, depth, dataHash });
+    return buildSummaryContext(
+      mindmapData,
+      systemPrompt,
+      userMessage,
+      maxTokens,
+      { nodeCount, depth, dataHash },
+    );
   }
 }
 
@@ -212,7 +267,7 @@ function buildSmallFileContext(
   userMessage: string,
   conversation: AIConversation,
   maxTokens: number,
-  info: any
+  info: any,
 ) {
   // 构建包含JSON的系统提示词
   const enhancedPrompt = `${systemPrompt}
@@ -230,25 +285,29 @@ ${jsonStr}
   const userMessageTokens = estimateTokens(userMessage);
 
   // 计算可用于历史消息的token
-  const availableForHistory = maxTokens - systemPromptTokens - userMessageTokens - MINDMAP_CONTEXT_CONFIG.BUFFER;
+  const availableForHistory =
+    maxTokens -
+    systemPromptTokens -
+    userMessageTokens -
+    MINDMAP_CONTEXT_CONFIG.BUFFER;
 
   console.log("[MindMapContext] 可用于历史消息的token:", availableForHistory);
 
-  const messages: ChatMessage[] = [
-    { role: "system", content: enhancedPrompt }
-  ];
+  const messages: ChatMessage[] = [{ role: "system", content: enhancedPrompt }];
 
   // 添加历史消息 (如果空间允许)
   let usedTokens = 0;
   for (const msg of conversation.messages) {
     const msgTokens = estimateTokens(msg.content);
     if (usedTokens + msgTokens > availableForHistory) {
-      console.log(`[MindMapContext] 跳过历史消息,已使用 ${usedTokens}/${availableForHistory} tokens`);
+      console.log(
+        `[MindMapContext] 跳过历史消息,已使用 ${usedTokens}/${availableForHistory} tokens`,
+      );
       break;
     }
     messages.push({
       role: msg.role as "user" | "assistant",
-      content: msg.content
+      content: msg.content,
     });
     usedTokens += msgTokens;
   }
@@ -259,7 +318,7 @@ ${jsonStr}
   return {
     messages,
     strategy: "small" as const,
-    info: { ...info, jsonTokens }
+    info: { ...info, jsonTokens },
   };
 }
 
@@ -273,7 +332,7 @@ function buildLargeFileContext(
   systemPrompt: string,
   userMessage: string,
   maxTokens: number,
-  info: any
+  info: any,
 ) {
   // 构建包含JSON的系统提示词
   const enhancedPrompt = `${systemPrompt}
@@ -291,7 +350,7 @@ ${jsonStr}
 
   const messages: ChatMessage[] = [
     { role: "system", content: enhancedPrompt },
-    { role: "user", content: userMessage }
+    { role: "user", content: userMessage },
   ];
 
   console.log("[MindMapContext] 大文件策略,不包含历史消息");
@@ -299,7 +358,7 @@ ${jsonStr}
   return {
     messages,
     strategy: "large" as const,
-    info: { ...info, jsonTokens }
+    info: { ...info, jsonTokens },
   };
 }
 
@@ -311,7 +370,7 @@ function buildSummaryContext(
   systemPrompt: string,
   userMessage: string,
   maxTokens: number,
-  info: any
+  info: any,
 ) {
   const summary = generateStructureSummary(mindmapData);
 
@@ -330,7 +389,7 @@ ${summary}
 
   const messages: ChatMessage[] = [
     { role: "system", content: enhancedPrompt },
-    { role: "user", content: userMessage }
+    { role: "user", content: userMessage },
   ];
 
   console.log("[MindMapContext] 超大文件策略,只发送摘要");
@@ -338,7 +397,7 @@ ${summary}
   return {
     messages,
     strategy: "summary" as const,
-    info: { ...info, jsonTokens: 0 }
+    info: { ...info, jsonTokens: 0 },
   };
 }
 
@@ -348,26 +407,36 @@ ${summary}
 function buildFallbackContext(
   systemPrompt: string,
   userMessage: string,
-  conversation: AIConversation
+  conversation: AIConversation,
 ) {
-  const messages: ChatMessage[] = [
-    { role: "system", content: systemPrompt }
-  ];
+  console.log("[MindMapContext] 使用降级方案");
+  console.log("[MindMapContext] userMessage:", userMessage);
+  console.log(
+    "[MindMapContext] conversation.messages.length:",
+    conversation.messages.length,
+  );
+
+  const messages: ChatMessage[] = [{ role: "system", content: systemPrompt }];
 
   // 添加历史消息
   for (const msg of conversation.messages) {
     messages.push({
       role: msg.role as "user" | "assistant",
-      content: msg.content
+      content: msg.content,
     });
   }
+
+  console.log("[MindMapContext] 历史消息数量:", messages.length - 1);
 
   // 添加当前用户消息
   messages.push({ role: "user", content: userMessage });
 
+  console.log("[MindMapContext] 最终消息数量:", messages.length);
+  console.log("[MindMapContext] 最后一条消息:", messages[messages.length - 1]);
+
   return {
     messages,
     strategy: "small" as const,
-    info: { nodeCount: 0, depth: 0, jsonTokens: 0, dataHash: "fallback" }
+    info: { nodeCount: 0, depth: 0, jsonTokens: 0, dataHash: "fallback" },
   };
 }

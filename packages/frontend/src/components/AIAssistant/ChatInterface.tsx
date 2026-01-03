@@ -699,7 +699,13 @@ function CopyButton({ content }: { content: string }) {
 }
 
 // 助手选择下拉组件
-function AssistantSelect({ onOpenSettings }: { onOpenSettings: () => void }) {
+function AssistantSelect({
+  onOpenSettings,
+  noteId,
+}: {
+  onOpenSettings: () => void;
+  noteId?: string;
+}) {
   const {
     currentAssistant,
     setCurrentAssistant,
@@ -725,7 +731,7 @@ function AssistantSelect({ onOpenSettings }: { onOpenSettings: () => void }) {
   };
 
   const handleNewChat = async () => {
-    await createConversation();
+    await createConversation(noteId);
     setMenuVisible(false);
   };
 
@@ -871,7 +877,11 @@ const suggestions = [
 // Main Component
 // ============================================
 
-function ChatInterface() {
+interface ChatInterfaceProps {
+  noteId?: string;
+}
+
+function ChatInterface({ noteId }: ChatInterfaceProps) {
   const { message } = App.useApp();
   const {
     currentConversation,
@@ -1046,7 +1056,10 @@ function ChatInterface() {
           borderBottom: `1px solid ${COLORS.subtle}`,
         }}
       >
-        <AssistantSelect onOpenSettings={() => setSettingsModalVisible(true)} />
+        <AssistantSelect
+          onOpenSettings={() => setSettingsModalVisible(true)}
+          noteId={noteId}
+        />
       </InputContainer>
 
       {/* 消息列表 */}

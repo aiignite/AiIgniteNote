@@ -47,6 +47,7 @@ interface NoteStore {
   checkOnlineStatus: () => void;
   syncAllNotes: () => Promise<void>;
   syncToServer: (note: LocalNote) => Promise<boolean>;
+  syncPendingNotes: () => Promise<void>;
   syncPendingCategories: () => Promise<void>;
 }
 
@@ -62,7 +63,14 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
 
   // 检查在线状态
   checkOnlineStatus: () => {
+    const wasOffline = !get().isOnline;
     set({ isOnline: navigator.onLine });
+
+    // 如果从离线变为在线，自动重试同步待同步的笔记
+    if (wasOffline && navigator.onLine) {
+      console.log("[noteStore] 网络已恢复，开始同步待同步的笔记");
+      get().syncPendingNotes();
+    }
   },
 
   loadNotes: async () => {
@@ -183,7 +191,7 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
       const { isOnline } = get();
       if (isOnline) {
         try {
-          const response = await notesApi.createNote({
+          const requestData = {
             title: noteData.title,
             content: noteData.content,
             htmlContent: noteData.htmlContent,
@@ -191,25 +199,68 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
             categoryId: noteData.category,
             tags: noteData.tags,
             metadata: noteData.metadata,
-          });
+          };
+
+          console.log(
+            "[createNote] 准备发送的数据:",
+            JSON.stringify(requestData, null, 2),
+          );
+
+          const response = await notesApi.createNote(requestData);
 
           // 更新本地笔记的 ID 为后端返回的 ID
-          const syncedNote = { ...localNote, id: response.data.id };
+          const syncedNote = {
+            ...localNote,
+            id: response.data.id,
+            synced: true,
+            pendingSync: false,
+            needsServerId: false,
+          };
           await db.notes.put(syncedNote);
           set((state) => ({ notes: [syncedNote, ...state.notes] }));
           return syncedNote;
-        } catch (apiError) {
-          console.warn(
-            "Failed to sync to backend, using local only:",
-            apiError,
-          );
-          set((state) => ({ notes: [localNote, ...state.notes] }));
-          return localNote;
+        } catch (apiError: any) {
+          console.warn("[createNote] 同步到后端失败，标记为待同步:", apiError);
+
+          // 详细的错误日志
+          if (apiError.response) {
+            console.error("[createNote] 后端返回错误:", {
+              status: apiError.response.status,
+              data: apiError.response.data,
+              request: {
+                url: apiError.config?.url,
+                method: apiError.config?.method,
+                data: apiError.config?.data,
+              },
+            });
+          }
+
+          // 标记为需要服务器 ID，后续会通过 sync API 创建
+          const pendingNote = {
+            ...localNote,
+            synced: false,
+            pendingSync: true,
+            needsServerId: true, // 标记需要在服务器创建新记录
+            lastSyncError:
+              apiError.response?.data?.error?.message ||
+              apiError.response?.data?.message ||
+              (apiError instanceof Error ? apiError.message : String(apiError)),
+          };
+          await db.notes.put(pendingNote);
+          set((state) => ({ notes: [pendingNote, ...state.notes] }));
+          return pendingNote;
         }
       } else {
-        // 离线状态，只保存到本地
-        set((state) => ({ notes: [localNote, ...state.notes] }));
-        return localNote;
+        // 离线状态，标记为待同步
+        const pendingNote = {
+          ...localNote,
+          synced: false,
+          pendingSync: true,
+          needsServerId: true,
+        };
+        await db.notes.put(pendingNote);
+        set((state) => ({ notes: [pendingNote, ...state.notes] }));
+        return pendingNote;
       }
     } catch (error) {
       console.error("Failed to create note:", error);
@@ -222,13 +273,70 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
       const updatedAt = Date.now();
       const updateData = { ...updates, updatedAt };
 
+      // 获取当前笔记信息，检查是否需要服务器 ID
+      const currentNote = await db.notes.get(id);
+      if (!currentNote) {
+        throw new Error("笔记不存在");
+      }
+
       // 先更新本地 IndexedDB
-      await db.updateNote(id, updateData);
+      await db.updateNote(id, {
+        ...updateData,
+        synced: false, // 标记为未同步
+        pendingSync: true, // 标记为待同步
+        lastSyncError: undefined, // 清除之前的错误
+      });
 
       // 如果在线，尝试同步到后端
       const { isOnline } = get();
       if (isOnline) {
         try {
+          // 如果笔记标记为需要服务器 ID，则创建新记录而非更新
+          if (currentNote.needsServerId) {
+            console.log(`[updateNote] 笔记 ${id} 需要服务器 ID，将创建新记录`);
+
+            const requestData = {
+              title: updates.title || currentNote.title,
+              content: updates.content ?? currentNote.content,
+              htmlContent: updates.htmlContent ?? currentNote.htmlContent,
+              fileType: currentNote.fileType,
+              categoryId: updates.category || currentNote.category,
+              tags: updates.tags || currentNote.tags,
+              metadata: updates.metadata || currentNote.metadata,
+            };
+
+            console.log(
+              "[updateNote] 准备发送的数据:",
+              JSON.stringify(requestData, null, 2),
+            );
+
+            const response = await notesApi.createNote(requestData);
+
+            // 更新本地笔记的 ID 为后端返回的 ID
+            const syncedNote = {
+              ...currentNote,
+              ...updateData,
+              id: response.data.id,
+              synced: true,
+              pendingSync: false,
+              needsServerId: false,
+              lastSyncError: undefined,
+            };
+            await db.notes.put(syncedNote);
+            await db.notes.delete(id); // 删除旧的临时 ID 记录
+
+            // 更新状态
+            set((state) => ({
+              notes: state.notes
+                .filter((n) => n.id !== id) // 移除旧 ID
+                .concat(syncedNote), // 添加新 ID
+              currentNote:
+                state.currentNote?.id === id ? syncedNote : state.currentNote,
+            }));
+            return;
+          }
+
+          // 正常更新流程
           await notesApi.updateNote(id, {
             title: updates.title,
             content: updates.content,
@@ -238,18 +346,37 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
             metadata: updates.metadata,
             isFavorite: updates.isFavorite,
           });
+
+          // 同步成功，更新本地状态
+          await db.updateNote(id, {
+            synced: true,
+            pendingSync: false,
+            lastSyncError: undefined,
+          });
         } catch (apiError) {
-          console.warn("Failed to sync update to backend:", apiError);
+          console.warn("[updateNote] 同步到后端失败，标记为待同步:", apiError);
+          // 保持 pendingSync: true 状态，以便后续重试
+          await db.updateNote(id, {
+            lastSyncError:
+              apiError instanceof Error ? apiError.message : String(apiError),
+          });
         }
       }
 
       set((state) => ({
         notes: state.notes.map((note) =>
-          note.id === id ? { ...note, ...updateData } : note,
+          note.id === id
+            ? { ...note, ...updateData, synced: false, pendingSync: true }
+            : note,
         ),
         currentNote:
           state.currentNote?.id === id
-            ? { ...state.currentNote, ...updateData }
+            ? {
+                ...state.currentNote,
+                ...updateData,
+                synced: false,
+                pendingSync: true,
+              }
             : state.currentNote,
       }));
     } catch (error) {
@@ -596,6 +723,155 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
     }
   },
 
+  // 同步待处理的笔记到服务器
+  syncPendingNotes: async () => {
+    const { isOnline } = get();
+    if (!isOnline) {
+      console.log("[syncPendingNotes] 离线状态，跳过同步");
+      return;
+    }
+
+    try {
+      console.log("[syncPendingNotes] 开始同步待处理的笔记");
+
+      // 获取所有待同步的笔记
+      const pendingNotes = await db.notes
+        .filter((note) => note.pendingSync)
+        .toArray();
+
+      console.log(
+        `[syncPendingNotes] 找到 ${pendingNotes.length} 个待同步笔记`,
+      );
+
+      let successCount = 0;
+      let failCount = 0;
+
+      for (const note of pendingNotes) {
+        try {
+          if (note.needsServerId) {
+            // 需要在服务器创建新记录
+            console.log(`[syncPendingNotes] 创建新笔记: ${note.id}`);
+            const response = await notesApi.createNote({
+              title: note.title,
+              content: note.content,
+              htmlContent: note.htmlContent,
+              fileType: note.fileType,
+              categoryId: note.category,
+              tags: note.tags,
+              metadata: note.metadata,
+            });
+
+            // 更新本地笔记的 ID 和状态
+            const syncedNote = {
+              ...note,
+              id: response.data.id,
+              synced: true,
+              pendingSync: false,
+              needsServerId: false,
+              lastSyncError: undefined,
+            };
+            await db.notes.put(syncedNote);
+            await db.notes.delete(note.id); // 删除旧 ID 记录
+
+            // 更新 store 状态
+            set((state) => ({
+              notes: state.notes
+                .filter((n) => n.id !== note.id)
+                .concat(syncedNote),
+              currentNote:
+                state.currentNote?.id === note.id
+                  ? syncedNote
+                  : state.currentNote,
+            }));
+
+            successCount++;
+            console.log(
+              `[syncPendingNotes] ✅ 创建成功: ${note.id} -> ${response.data.id}`,
+            );
+          } else {
+            // 正常更新现有记录
+            console.log(`[syncPendingNotes] 更新笔记: ${note.id}`);
+            await notesApi.updateNote(note.id, {
+              title: note.title,
+              content: note.content,
+              htmlContent: note.htmlContent,
+              categoryId: note.category,
+              tags: note.tags,
+              metadata: note.metadata,
+              isFavorite: note.isFavorite,
+            });
+
+            // 更新同步状态
+            await db.updateNote(note.id, {
+              synced: true,
+              pendingSync: false,
+              lastSyncError: undefined,
+            });
+
+            // 更新 store 状态
+            set((state) => ({
+              notes: state.notes.map((n) =>
+                n.id === note.id
+                  ? {
+                      ...n,
+                      synced: true,
+                      pendingSync: false,
+                      lastSyncError: undefined,
+                    }
+                  : n,
+              ),
+              currentNote:
+                state.currentNote?.id === note.id
+                  ? {
+                      ...state.currentNote,
+                      synced: true,
+                      pendingSync: false,
+                      lastSyncError: undefined,
+                    }
+                  : state.currentNote,
+            }));
+
+            successCount++;
+            console.log(`[syncPendingNotes] ✅ 更新成功: ${note.id}`);
+          }
+        } catch (error) {
+          failCount++;
+          const errorMessage =
+            error instanceof Error ? error.message : String(error);
+          console.error(
+            `[syncPendingNotes] ❌ 同步失败 ${note.id}:`,
+            errorMessage,
+          );
+
+          // 更新错误信息
+          await db.updateNote(note.id, {
+            lastSyncError: errorMessage,
+          });
+        }
+      }
+
+      console.log(
+        `[syncPendingNotes] 同步完成: ${successCount} 成功, ${failCount} 失败`,
+      );
+
+      set({
+        syncStatus:
+          failCount === 0 ? ("success" as SyncStatus) : ("error" as SyncStatus),
+      });
+
+      setTimeout(() => {
+        set((state) =>
+          state.syncStatus === "success" || state.syncStatus === "error"
+            ? { syncStatus: "idle" as SyncStatus }
+            : {},
+        );
+      }, 3000);
+    } catch (error) {
+      console.error("[syncPendingNotes] 同步过程出错:", error);
+      set({ syncStatus: "error" as SyncStatus });
+    }
+  },
+
   // 同步待处理的分类到服务器
   syncPendingCategories: async () => {
     const { isOnline } = get();
@@ -695,6 +971,7 @@ if (typeof window !== "undefined") {
   window.addEventListener("online", () => {
     useNoteStore.getState().checkOnlineStatus();
     // 连接恢复时自动同步
+    useNoteStore.getState().syncPendingNotes();
     useNoteStore.getState().syncAllNotes();
     useNoteStore.getState().syncPendingCategories();
   });

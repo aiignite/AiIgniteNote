@@ -55,8 +55,11 @@ export interface LocalNote {
     customConfig?: Record<string, any>;
   };
   // 同步相关字段
+  synced: boolean; // 是否已同步到服务器
+  pendingSync: boolean; // 是否有待同步的更改
+  needsServerId: boolean; // 是否需要在服务器创建新记录（而不是更新现有记录）
+  lastSyncError?: string; // 最后一次同步失败的错误信息
   syncedAt?: number;
-  pendingSync?: boolean;
   serverVersion?: number;
 }
 

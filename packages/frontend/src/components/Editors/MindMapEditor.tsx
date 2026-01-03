@@ -212,13 +212,16 @@ function MindMapEditor({
 
         if (validation.valid && validation.normalized) {
           // 使用规范化后的数据
-          // validateMindMapJSON 已经将数据转换为 {text, children} 格式
+          // validateMindMapJSON 返回 simple-mind-map 格式: {data: {text}, children: [...]}
           initialData = validation.normalized;
           console.log(
             "[MindMapEditor] 使用规范化数据加载思维导图:",
             initialData,
           );
-          console.log("[MindMapEditor] initialData.text:", initialData.text);
+          console.log(
+            "[MindMapEditor] initialData.data.text:",
+            initialData.data?.text,
+          );
           console.log(
             "[MindMapEditor] initialData.children 数量:",
             initialData.children?.length,
@@ -238,12 +241,12 @@ function MindMapEditor({
     }
 
     // 创建思维导图实例
-    // validateMindMapJSON 已经将数据转换为 simple-mind-map 期望的格式: {text, children}
+    // validateMindMapJSON 返回 simple-mind-map 期望的格式: {data: {text}, children: [...]}
     // 所以这里直接使用 initialData
     console.log("[MindMapEditor] 传入构造函数的数据:", initialData);
     console.log(
-      "[MindMapEditor] 构造函数数据格式检查 - text:",
-      initialData.text,
+      "[MindMapEditor] 构造函数数据格式检查 - data.text:",
+      initialData.data?.text,
     );
     console.log(
       "[MindMapEditor] 构造函数数据格式检查 - children 数量:",
@@ -768,7 +771,7 @@ function MindMapEditor({
             title={`发送选中节点到 AI 助手 ${selectedNodeCount > 0 ? `(${selectedNodeCount} 个节点)` : ""}`}
           >
             <Button
-              type={selectedNodeCount > 0 ? "primary" : "default"}
+              type="primary"
               icon={<SendOutlined />}
               onClick={handleSendToAI}
               size="small"
@@ -783,20 +786,17 @@ function MindMapEditor({
               icon={<ImportOutlined />}
               onClick={handleImportFromAI}
               size="small"
-            >
-              从 AI 导入
-            </Button>
+            />
           </Tooltip>
 
           {/* 从剪贴板导入 */}
           <Tooltip title="从系统剪贴板导入(支持手工复制)">
             <Button
+              type="primary"
               icon={<CopyOutlined />}
               onClick={handleImportFromClipboard}
               size="small"
-            >
-              粘贴导入
-            </Button>
+            />
           </Tooltip>
         </Space>
 

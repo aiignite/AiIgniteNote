@@ -563,6 +563,28 @@ export const useAIStore = create<AIStore>((set, get) => ({
       throw new Error("对话不存在");
     }
 
+    // 检查对话是否有关联的笔记
+    // 如果没有 noteId，说明是旧对话，尝试从当前 URL 获取 noteId 并重新创建对话
+    if (!conversation.noteId) {
+      const currentPath = window.location.pathname;
+      const noteIdFromUrl = currentPath.startsWith("/notes/")
+        ? currentPath.split("/")[2]
+        : undefined;
+
+      if (noteIdFromUrl) {
+        console.log(
+          "[AIStore] 检测到旧对话没有 noteId，自动创建新对话关联到当前笔记",
+        );
+        console.log("[AIStore] 从 URL 提取的 noteId:", noteIdFromUrl);
+
+        // 创建新对话
+        const newConversation = await get().createConversation(noteIdFromUrl);
+
+        // 使用新对话发送消息
+        return get().sendMessage(newConversation.id, content, signal);
+      }
+    }
+
     // 检查是否是思维导图笔记
     const isMindMap =
       conversation.noteId &&
@@ -574,32 +596,31 @@ export const useAIStore = create<AIStore>((set, get) => ({
     // 获取当前助手的系统提示词
     const currentAssistant = get().currentAssistant;
 
-    // 使用上下文管理服务构建消息（思维导图模式会自动注入上下文和用户消息）
+    // 使用上下文管理服务构建消息
+    // 对于思维导图笔记，传入当前用户消息以注入思维导图上下文
     const messages = await buildMessagesForAI(
       conversation,
       currentAssistant.systemPrompt,
-      {},
+      isMindMap ? { currentUserMessage: content } : {},
       signal,
     );
 
-    // 对于非思维导图模式,需要手动添加用户消息
-    // 思维导图模式下,buildMindMapContext已经包含了用户消息
+    // 检查是否是思维导图模式（通过检测系统消息中是否包含思维导图数据）
     const isMindMapMode = messages.some(
       (m) => m.role === "system" && m.content.includes("当前思维导图数据"),
     );
 
+    // 添加用户消息到对话历史
+    // 注意：buildMessagesForAI 返回的 messages 已经包含了正确的消息列表
+    // 这里只是将用户消息保存到对话历史中
+    await get().addMessage(conversationId, {
+      role: "user",
+      content,
+    });
+
+    // 如果是非思维导图模式，需要手动将用户消息添加到发送列表中
     if (!isMindMapMode) {
-      // 非思维导图模式: 添加用户消息到对话
-      await get().addMessage(conversationId, {
-        role: "user",
-        content,
-      });
-    } else {
-      // 思维导图模式: 添加用户消息到对话(用于历史记录)
-      await get().addMessage(conversationId, {
-        role: "user",
-        content,
-      });
+      messages.push({ role: "user", content });
     }
 
     // 打印 token 使用情况（开发调试）

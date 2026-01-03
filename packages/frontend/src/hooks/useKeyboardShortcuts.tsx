@@ -74,7 +74,7 @@ export function useGlobalKeyboardShortcuts() {
       content: "",
       htmlContent: "",
       tags: [],
-      category: "default",
+      category: "", // 使用空字符串，后端会自动分配到"未分类"
       isDeleted: false,
       isFavorite: false,
       fileType: "markdown" as any,

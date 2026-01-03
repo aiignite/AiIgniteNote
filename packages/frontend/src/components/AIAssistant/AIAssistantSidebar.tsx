@@ -141,6 +141,7 @@ interface AIAssistantSidebarProps {
   visible: boolean;
   onClose: () => void;
   onWidthChange?: (width: number) => void;
+  noteId?: string;
 }
 
 // ============================================
@@ -148,7 +149,7 @@ interface AIAssistantSidebarProps {
 // ============================================
 
 function AIAssistantSidebar(
-  { visible, onClose, onWidthChange }: AIAssistantSidebarProps,
+  { visible, onClose, onWidthChange, noteId }: AIAssistantSidebarProps,
   ref: React.ForwardedRef<AIAssistantRef>,
 ) {
   const { currentConversation, createConversation, loadConversations } =
@@ -242,7 +243,7 @@ function AIAssistantSidebar(
         }}
       >
         <SidebarContent>
-          <ChatInterface />
+          <ChatInterface noteId={noteId} />
         </SidebarContent>
       </Drawer>
     );
@@ -287,7 +288,7 @@ function AIAssistantSidebar(
 
         {/* 内容 */}
         <SidebarContent>
-          <ChatInterface />
+          <ChatInterface noteId={noteId} />
         </SidebarContent>
       </SidebarContainer>
     </div>

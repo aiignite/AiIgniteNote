@@ -183,6 +183,11 @@ function MainLayout() {
 
   const sidebarWidth = 240;
 
+  // 从路由中提取 noteId (例如: /notes/note_xxx)
+  const noteId = location.pathname.startsWith("/notes/")
+    ? location.pathname.split("/")[2]
+    : undefined;
+
   // 根据路由决定是否显示AI助手（在笔记页面、设置页面、回收站页面都显示）
   const showAIAssistant = ["/notes", "/settings", "/trash"].some((path) =>
     location.pathname.startsWith(path),
@@ -264,6 +269,7 @@ function MainLayout() {
               visible={aiAssistantVisible && !isSmallScreen}
               onClose={() => setAiAssistantVisible(false)}
               onWidthChange={(width) => setAiAssistantWidth(width)}
+              noteId={noteId}
             />
           </AIWrapper>
         )}

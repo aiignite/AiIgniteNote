@@ -263,8 +263,8 @@ function RichTextEditor({
             icon={<BoldOutlined />}
             onClick={() => editor.chain().toggleBold().run()}
             style={{
-              background: editor.isActive("bold")
-                ? "var(--bg-tertiary)"
+              color: editor.isActive("bold")
+                ? "var(--primary-color)"
                 : undefined,
             }}
           />
@@ -273,8 +273,8 @@ function RichTextEditor({
             icon={<ItalicOutlined />}
             onClick={() => editor.chain().toggleItalic().run()}
             style={{
-              background: editor.isActive("italic")
-                ? "var(--bg-tertiary)"
+              color: editor.isActive("italic")
+                ? "var(--primary-color)"
                 : undefined,
             }}
           />
@@ -283,8 +283,8 @@ function RichTextEditor({
             icon={<UnderlineOutlined />}
             onClick={() => editor.chain().toggleUnderline().run()}
             style={{
-              background: editor.isActive("underline")
-                ? "var(--bg-tertiary)"
+              color: editor.isActive("underline")
+                ? "var(--primary-color)"
                 : undefined,
             }}
           />

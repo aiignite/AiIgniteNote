@@ -396,7 +396,7 @@ function NoteEditor({ noteId }: NoteEditorProps) {
         title: "新建笔记",
         content: "",
         tags: [],
-        category: "default",
+        category: "", // 使用空字符串，后端会自动分配到"未分类"
         isDeleted: false,
         isFavorite: false,
         fileType: NoteFileType.MARKDOWN,
