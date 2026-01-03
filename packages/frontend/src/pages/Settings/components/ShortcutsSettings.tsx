@@ -24,7 +24,7 @@ const fadeIn = keyframes`
 // ============================================
 
 const SectionContainer = styled.div`
-  max-width: 680px;
+  width: 100%;
 `;
 
 const HeaderActions = styled.div`

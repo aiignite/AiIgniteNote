@@ -9,6 +9,7 @@ import {
 import styled, { keyframes, css } from "styled-components";
 import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "../store/authStore";
+import { BrandLogo } from "../components/BrandLogo";
 
 // ============================================
 // ANIMATIONS
@@ -660,7 +661,7 @@ export default function LoginPage() {
             </MainTitle>
 
             <EditorialSubtitle>
-              AiNote 将先进的 AI
+              <BrandLogo size="medium" /> 将先进的 AI
               技术与优雅的笔记体验融合，让每一次记录都成为灵感的延伸。
             </EditorialSubtitle>
 
@@ -678,7 +679,7 @@ export default function LoginPage() {
             <FormTitle $mode={mode}>
               {mode === "login" ? "欢迎" : "加入"}
               <span className="italic">
-                {mode === "login" ? "回来" : "AiNote"}
+                {mode === "login" ? "回来" : <BrandLogo size="small" />}
               </span>
             </FormTitle>
             <FormSubtitle>

@@ -4,11 +4,20 @@ import { useParams } from "react-router-dom";
 import NoteList from "../components/Note/NoteList";
 import NoteEditor from "../components/Note/NoteEditor";
 import styled from "styled-components";
+import { useFullscreenStore } from "../store/fullscreenStore";
 
-const PageContainer = styled.div`
+const PageContainer = styled.div<{ $fullscreen?: boolean }>`
   height: 100%;
   display: flex;
   width: 100%;
+
+  ${(props) =>
+    props.$fullscreen &&
+    `
+    position: fixed;
+    inset: 0;
+    z-index: 9998;
+    `}
 
   @media (max-width: 768px) {
     flex-direction: column;
@@ -44,6 +53,7 @@ function NotePage() {
     categoryId?: string;
     tagId?: string;
   }>();
+  const { isFullscreen } = useFullscreenStore();
   const [selectedNoteId, setSelectedNoteId] = useState<string | undefined>(
     noteId,
   );
@@ -99,29 +109,31 @@ function NotePage() {
   }
 
   return (
-    <PageContainer>
+    <PageContainer $fullscreen={isFullscreen}>
       <StyledRow gutter={0}>
-        {/* 笔记列表 */}
-        <ListCol
-          span={6}
-          $mobileHidden={!showList && isMobile}
-          style={{
-            height: "100%",
-            borderRight: "1px solid rgba(0, 0, 0, 0.08)",
-            overflow: "hidden",
-          }}
-        >
-          <NoteList
-            selectedNoteId={selectedNoteId}
-            onSelectNote={setSelectedNoteId}
-            filterCategoryId={categoryId}
-            filterTagId={tagId}
-          />
-        </ListCol>
+        {/* 笔记列表 - 全屏时隐藏 */}
+        {!isFullscreen && (
+          <ListCol
+            span={6}
+            $mobileHidden={!showList && isMobile}
+            style={{
+              height: "100%",
+              borderRight: "1px solid rgba(0, 0, 0, 0.08)",
+              overflow: "hidden",
+            }}
+          >
+            <NoteList
+              selectedNoteId={selectedNoteId}
+              onSelectNote={setSelectedNoteId}
+              filterCategoryId={categoryId}
+              filterTagId={tagId}
+            />
+          </ListCol>
+        )}
 
         {/* 笔记编辑器 */}
         <Col
-          span={18}
+          span={isFullscreen ? 24 : 18}
           style={{
             height: "100%",
             overflow: "hidden",

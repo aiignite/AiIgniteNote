@@ -1,9 +1,6 @@
-import { useEffect, useRef, useState, useCallback } from "react";
-import { Button, Space, Dropdown, message, Tooltip, Select, Input } from "antd";
+import { useEffect, useRef, useState } from "react";
+import { Button, Space, Dropdown, message, Tooltip, Input, Modal } from "antd";
 import {
-  DownloadOutlined,
-  UploadOutlined,
-  PlusOutlined,
   DeleteOutlined,
   UndoOutlined,
   RedoOutlined,
@@ -15,6 +12,7 @@ import {
   SnippetsOutlined,
   BgColorsOutlined,
   LayoutOutlined,
+  QuestionCircleOutlined,
 } from "@ant-design/icons";
 import styled from "styled-components";
 import MindMap from "simple-mind-map";
@@ -95,63 +93,72 @@ const defaultMindData = {
   root: {
     data: {
       text: "中心主题",
-      children: [
-        { data: { text: "分支 1" } },
-        { data: { text: "分支 2" } },
-        { data: { text: "分支 3" } },
-      ],
+      children: [],
     },
   },
 };
 
 // 布局选项 - 使用正确的字符串值
 const layoutOptions = [
-  { label: "思维导图", value: "mindMap" },
-  { label: "逻辑结构图", value: "logicalStructure" },
-  { label: "组织结构图", value: "organizationStructure" },
-  { label: "目录组织图", value: "catalogOrganization" },
-  { label: "鱼骨图", value: "fishbone" },
-  { label: "时间轴", value: "timeline" },
-  { label: "竖向时间轴", value: "verticalTimeline" },
+  { key: "mindMap", label: "思维导图", value: "mindMap" },
+  { key: "logicalStructure", label: "逻辑结构图", value: "logicalStructure" },
+  {
+    key: "organizationStructure",
+    label: "组织结构图",
+    value: "organizationStructure",
+  },
+  {
+    key: "catalogOrganization",
+    label: "目录组织图",
+    value: "catalogOrganization",
+  },
+  { key: "fishbone", label: "鱼骨图", value: "fishbone" },
+  { key: "timeline", label: "时间轴", value: "timeline" },
+  { key: "verticalTimeline", label: "竖向时间轴", value: "verticalTimeline" },
 ];
 
 // 主题选项 - 来自 simple-mind-map-plugin-themes
 const themeOptions = [
   // 亮色主题
-  { label: "经典绿", value: "classicGreen" },
-  { label: "经典蓝", value: "classicBlue" },
-  { label: "天空蓝", value: "blueSky" },
-  { label: "小黄人", value: "minions" },
-  { label: "清新绿", value: "freshGreen" },
-  { label: "清新红", value: "freshRed" },
-  { label: "红色精神", value: "redSpirit" },
-  { label: "浪漫紫", value: "romanticPurple" },
-  { label: "天清绿", value: "skyGreen" },
-  { label: "绿叶", value: "greenLeaf" },
-  { label: "咖啡", value: "coffee" },
-  { label: "牛油果", value: "avocado" },
-  { label: "秋天", value: "autumn" },
-  { label: "奥利奥", value: "oreo" },
-  { label: "浅海", value: "shallowSea" },
-  { label: "柠檬气泡", value: "lemonBubbles" },
-  { label: "玫瑰", value: "rose" },
-  { label: "莫兰迪", value: "morandi" },
-  { label: "仙人掌", value: "cactus" },
-  { label: "脑图经典2", value: "classic2" },
-  { label: "脑图经典3", value: "classic3" },
-  { label: "脑图经典4", value: "classic4" },
-  { label: "脑图经典5", value: "classic5" },
+  { key: "classicGreen", label: "经典绿", value: "classicGreen" },
+  { key: "classicBlue", label: "经典蓝", value: "classicBlue" },
+  { key: "blueSky", label: "天空蓝", value: "blueSky" },
+  { key: "minions", label: "小黄人", value: "minions" },
+  { key: "freshGreen", label: "清新绿", value: "freshGreen" },
+  { key: "freshRed", label: "清新红", value: "freshRed" },
+  { key: "redSpirit", label: "红色精神", value: "redSpirit" },
+  { key: "romanticPurple", label: "浪漫紫", value: "romanticPurple" },
+  { key: "skyGreen", label: "天清绿", value: "skyGreen" },
+  { key: "greenLeaf", label: "绿叶", value: "greenLeaf" },
+  { key: "coffee", label: "咖啡", value: "coffee" },
+  { key: "avocado", label: "牛油果", value: "avocado" },
+  { key: "autumn", label: "秋天", value: "autumn" },
+  { key: "oreo", label: "奥利奥", value: "oreo" },
+  { key: "shallowSea", label: "浅海", value: "shallowSea" },
+  { key: "lemonBubbles", label: "柠檬气泡", value: "lemonBubbles" },
+  { key: "rose", label: "玫瑰", value: "rose" },
+  { key: "morandi", label: "莫兰迪", value: "morandi" },
+  { key: "cactus", label: "仙人掌", value: "cactus" },
+  { key: "classic2", label: "脑图经典2", value: "classic2" },
+  { key: "classic3", label: "脑图经典3", value: "classic3" },
+  { key: "classic4", label: "脑图经典4", value: "classic4" },
+  { key: "classic5", label: "脑图经典5", value: "classic5" },
   // 暗色主题
-  { label: "脑图经典", value: "classic", dark: true },
-  { label: "黑色幽默", value: "blackHumour", dark: true },
-  { label: "深夜办公室", value: "lateNightOffice", dark: true },
-  { label: "黑金", value: "blackGold", dark: true },
-  { label: "橙汁", value: "orangeJuice", dark: true },
-  { label: "霓虹灯", value: "neonLamp", dark: true },
-  { label: "暗色", value: "dark", dark: true },
-  { label: "暗色2", value: "dark2", dark: true },
-  { label: "暗色3", value: "dark3", dark: true },
-  { label: "暗色7", value: "dark7", dark: true },
+  { key: "classic", label: "脑图经典", value: "classic", dark: true },
+  { key: "blackHumour", label: "黑色幽默", value: "blackHumour", dark: true },
+  {
+    key: "lateNightOffice",
+    label: "深夜办公室",
+    value: "lateNightOffice",
+    dark: true,
+  },
+  { key: "blackGold", label: "黑金", value: "blackGold", dark: true },
+  { key: "orangeJuice", label: "橙汁", value: "orangeJuice", dark: true },
+  { key: "neonLamp", label: "霓虹灯", value: "neonLamp", dark: true },
+  { key: "dark", label: "暗色", value: "dark", dark: true },
+  { key: "dark2", label: "暗色2", value: "dark2", dark: true },
+  { key: "dark3", label: "暗色3", value: "dark3", dark: true },
+  { key: "dark7", label: "暗色7", value: "dark7", dark: true },
 ];
 
 function MindMapEditor({
@@ -160,14 +167,18 @@ function MindMapEditor({
   metadata,
   onChange,
   onTitleChange,
-  onSave,
 }: EditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mindMapRef = useRef<any>(null);
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
-  const [data, setData] = useState<any>(defaultMindData);
-  const [currentLayout, setCurrentLayout] = useState("logicalStructure");
-  const [currentTheme, setCurrentTheme] = useState("classicGreen");
+  // 从 metadata 中读取保存的布局和主题,如果没有则使用默认值
+  const [currentLayout, setCurrentLayout] = useState(
+    metadata?.mindmapLayout || "logicalStructure",
+  );
+  const [currentTheme, setCurrentTheme] = useState(
+    metadata?.mindmapTheme || "classicGreen",
+  );
+  const [helpVisible, setHelpVisible] = useState(false);
 
   // 初始化思维导图
   useEffect(() => {
@@ -177,15 +188,18 @@ function MindMapEditor({
     let initialData = defaultMindData;
     try {
       if (metadata?.mindmapData) {
-        initialData = JSON.parse(metadata.mindmapData);
+        const parsed = JSON.parse(metadata.mindmapData);
+        // 直接使用保存的节点数据,包装成 mindmap 需要的格式
+        initialData = { root: parsed };
       } else if (content) {
-        initialData = JSON.parse(content);
+        const parsed = JSON.parse(content);
+        // 直接使用保存的节点数据,包装成 mindmap 需要的格式
+        initialData = { root: parsed };
       }
     } catch (error) {
       console.error("解析思维导图数据失败:", error);
+      initialData = defaultMindData;
     }
-
-    setData(initialData);
 
     // 创建思维导图实例
     const instance = new MindMap({
@@ -240,21 +254,33 @@ function MindMapEditor({
     // 监听数据变化
     instance.on("data_change", () => {
       try {
-        const rootData = instance.getData(false);
-        setData({ root: { data: rootData } });
+        // 使用 getData(false) 获取纯净的节点数据,不包含渲染状态
+        const currentData = mindMapRef.current?.getData(false);
+        if (currentData) {
+          // 直接保存节点数据
+          const jsonData = JSON.stringify(currentData, null, 2);
+          onChange(jsonData, {
+            ...metadata,
+            mindmapData: jsonData,
+            mindmapLayout: currentLayout as
+              | "mindMap"
+              | "logicalStructure"
+              | "organizationStructure"
+              | "catalogOrganization"
+              | "fishbone"
+              | "timeline"
+              | "verticalTimeline",
+            mindmapTheme: currentTheme,
+          });
+        }
       } catch (e) {
-        console.error("获取数据失败:", e);
+        console.error("保存数据失败:", e);
       }
     });
 
     // 渲染完成
     setTimeout(() => {
-      try {
-        const rootData = instance.getData(false);
-        setData({ root: { data: rootData } });
-      } catch (e) {
-        console.error("获取数据失败:", e);
-      }
+      // 渲染完成后的处理
     }, 500);
 
     return () => {
@@ -269,99 +295,6 @@ function MindMapEditor({
       }
     };
   }, []);
-
-  // 保存数据
-  const handleSave = useCallback(() => {
-    if (!mindMapRef.current) return;
-
-    try {
-      const currentData = mindMapRef.current.getData(true);
-      const jsonData = JSON.stringify({ root: { data: currentData } }, null, 2);
-      onChange(jsonData, {
-        ...metadata,
-        mindmapData: jsonData,
-        mindmapLayout: currentLayout as
-          | "mindMap"
-          | "logicalStructure"
-          | "organizationStructure"
-          | "catalogOrganization"
-          | "fishbone"
-          | "timeline"
-          | "verticalTimeline",
-      });
-      onSave?.();
-      message.success("保存成功");
-    } catch (e) {
-      console.error("保存失败:", e);
-      message.error("保存失败");
-    }
-  }, [metadata, onChange, onSave, currentLayout]);
-
-  // 导出功能
-  const handleDownload = useCallback(() => {
-    if (!mindMapRef.current) return;
-    try {
-      mindMapRef.current
-        .export("png", true)
-        .then((blob: Blob) => {
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement("a");
-          a.href = url;
-          a.download = `${title || "mindmap"}.png`;
-          a.click();
-          URL.revokeObjectURL(url);
-          message.success("已导出 PNG 图片");
-        })
-        .catch((e: any) => {
-          console.error("导出失败:", e);
-          message.error("导出失败，请使用浏览器的截图功能");
-        });
-    } catch (e) {
-      message.error("导出功能不可用");
-    }
-  }, [title]);
-
-  // 导入功能
-  const handleImport = useCallback((file: File) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const importedData = JSON.parse(e.target?.result as string);
-        setData(importedData);
-        if (mindMapRef.current) {
-          const dataToSet = importedData.root || importedData;
-          mindMapRef.current.setData(dataToSet);
-          message.success("导入成功");
-        }
-      } catch (error) {
-        console.error("导入失败:", error);
-        message.error("导入失败：无效的 JSON 文件");
-      }
-    };
-    reader.readAsText(file);
-  }, []);
-
-  const downloadItems = [
-    { key: "png", label: "PNG 图片" },
-    { key: "json", label: "JSON 数据" },
-  ];
-
-  // 添加子节点
-  const handleAddChildNode = () => {
-    if (!mindMapRef.current) return;
-    // 检查是否有选中的节点
-    const activeNodes = mindMapRef.current.renderer.activeNodeList;
-    if (!activeNodes || activeNodes.length === 0) {
-      message.warning("请先选中一个节点");
-      return;
-    }
-    try {
-      mindMapRef.current.execCommand("INSERT_CHILD_NODE");
-      message.success("已添加子节点");
-    } catch (e) {
-      message.error("添加失败");
-    }
-  };
 
   // 删除节点
   const handleDeleteNode = () => {
@@ -432,6 +365,22 @@ function MindMapEditor({
       setCurrentLayout(value);
       const layoutName = layoutOptions.find((o) => o.value === value)?.label;
       message.success(`已切换到${layoutName}`);
+
+      // 保存布局信息
+      try {
+        const currentData = mindMapRef.current.getData(false);
+        if (currentData) {
+          const jsonData = JSON.stringify(currentData, null, 2);
+          onChange(jsonData, {
+            ...metadata,
+            mindmapData: jsonData,
+            mindmapLayout: value as any,
+            mindmapTheme: currentTheme,
+          });
+        }
+      } catch (e) {
+        console.error("保存布局失败:", e);
+      }
     } catch (e: any) {
       console.error("切换布局失败:", e);
       message.error("切换布局失败");
@@ -449,6 +398,22 @@ function MindMapEditor({
       setCurrentTheme(theme);
       const themeName = themeOptions.find((o) => o.value === theme)?.label;
       message.success(`已切换到${themeName}主题`);
+
+      // 保存主题信息
+      try {
+        const currentData = mindMapRef.current.getData(false);
+        if (currentData) {
+          const jsonData = JSON.stringify(currentData, null, 2);
+          onChange(jsonData, {
+            ...metadata,
+            mindmapData: jsonData,
+            mindmapLayout: currentLayout as any,
+            mindmapTheme: theme,
+          });
+        }
+      } catch (e) {
+        console.error("保存主题失败:", e);
+      }
     } catch (e: any) {
       console.error("切换主题失败:", e);
       message.error("切换主题失败");
@@ -522,15 +487,6 @@ function MindMapEditor({
       <Toolbar>
         {/* 节点操作 */}
         <Space size="small">
-          <Tooltip title="添加子节点 (Tab)">
-            <Button
-              icon={<PlusOutlined />}
-              onClick={handleAddChildNode}
-              size="small"
-            >
-              子节点
-            </Button>
-          </Tooltip>
           <Tooltip title="删除节点 (Delete)">
             <Button
               icon={<DeleteOutlined />}
@@ -548,27 +504,21 @@ function MindMapEditor({
               icon={<CopyOutlined />}
               onClick={handleCopyNode}
               size="small"
-            >
-              复制
-            </Button>
+            />
           </Tooltip>
           <Tooltip title="剪切 (Ctrl+X)">
             <Button
               icon={<ScissorOutlined />}
               onClick={handleCutNode}
               size="small"
-            >
-              剪切
-            </Button>
+            />
           </Tooltip>
           <Tooltip title="粘贴 (Ctrl+V)">
             <Button
               icon={<SnippetsOutlined />}
               onClick={handlePasteNode}
               size="small"
-            >
-              粘贴
-            </Button>
+            />
           </Tooltip>
         </Space>
 
@@ -608,89 +558,113 @@ function MindMapEditor({
         </Space>
 
         {/* 布局切换 */}
-        <Select
-          value={currentLayout}
-          onChange={(value) => handleLayoutChange(value as string)}
-          options={layoutOptions}
-          style={{ width: 120 }}
-          size="small"
-          suffixIcon={<LayoutOutlined />}
-          placeholder="选择布局"
-        />
+        <Dropdown
+          menu={{
+            items: layoutOptions as any,
+            onClick: ({ key }) => handleLayoutChange(key as string),
+            selectedKeys: [currentLayout],
+          }}
+        >
+          <Tooltip title="切换布局">
+            <Button icon={<LayoutOutlined />} size="small" />
+          </Tooltip>
+        </Dropdown>
 
         {/* 主题切换 */}
-        <Select
-          value={currentTheme}
-          onChange={handleThemeChange}
-          options={themeOptions}
-          style={{ width: 120 }}
-          size="small"
-          suffixIcon={<BgColorsOutlined />}
-          placeholder="选择主题"
-        />
+        <Dropdown
+          menu={{
+            items: themeOptions as any,
+            onClick: ({ key }) => handleThemeChange(key as string),
+            selectedKeys: [currentTheme],
+          }}
+        >
+          <Tooltip title="切换主题">
+            <Button icon={<BgColorsOutlined />} size="small" />
+          </Tooltip>
+        </Dropdown>
 
-        {/* 文件操作 */}
-        <Space style={{ marginLeft: "auto" }}>
+        {/* 帮助按钮 */}
+        <Tooltip title="操作指南">
           <Button
-            icon={<UploadOutlined />}
-            onClick={() => {
-              const input = document.createElement("input");
-              input.type = "file";
-              input.accept = ".json,.smm";
-              input.onchange = (e) => {
-                const file = (e.target as HTMLInputElement).files?.[0];
-                if (file) handleImport(file);
-              };
-              input.click();
-            }}
+            icon={<QuestionCircleOutlined />}
             size="small"
-          >
-            导入
-          </Button>
-          <Dropdown
-            menu={{
-              items: downloadItems,
-              onClick: ({ key }) => {
-                if (key === "png") {
-                  handleDownload();
-                } else {
-                  try {
-                    const jsonData = JSON.stringify(data, null, 2);
-                    const blob = new Blob([jsonData], {
-                      type: "application/json",
-                    });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement("a");
-                    a.href = url;
-                    a.download = `${title || "mindmap"}.json`;
-                    a.click();
-                    URL.revokeObjectURL(url);
-                    message.success("已导出 JSON 文件");
-                  } catch (e) {
-                    message.error("导出失败");
-                  }
-                }
-              },
-            }}
-          >
-            <Button icon={<DownloadOutlined />} size="small">
-              导出
-            </Button>
-          </Dropdown>
-          {onSave && (
-            <Button type="primary" onClick={handleSave} size="small">
-              保存
-            </Button>
-          )}
-        </Space>
-
-        {/* 操作提示 */}
-        <div style={{ fontSize: 11, color: "#999", marginLeft: 8 }}>
-          双击编辑 | Tab子节点 | Enter兄弟节点 | Delete删除 | 右键拖动框选
-        </div>
+            onClick={() => setHelpVisible(true)}
+          />
+        </Tooltip>
       </Toolbar>
 
       <CanvasContainer ref={containerRef} />
+
+      {/* 操作指南弹窗 */}
+      <Modal
+        title="思维导图操作指南"
+        open={helpVisible}
+        onCancel={() => setHelpVisible(false)}
+        footer={[
+          <Button key="close" onClick={() => setHelpVisible(false)}>
+            我知道了
+          </Button>,
+        ]}
+        width={600}
+      >
+        <div style={{ lineHeight: "1.8" }}>
+          <h3>📝 节点编辑</h3>
+          <ul>
+            <li>
+              <strong>双击节点</strong> - 编辑节点文本内容
+            </li>
+            <li>
+              <strong>Tab 键</strong> - 添加子节点
+            </li>
+            <li>
+              <strong>Enter 键</strong> - 添加兄弟节点（同级节点）
+            </li>
+            <li>
+              <strong>Delete 键</strong> - 删除选中的节点
+            </li>
+          </ul>
+
+          <h3>🖱️ 鼠标操作</h3>
+          <ul>
+            <li>
+              <strong>左键拖动</strong> - 移动画布位置
+            </li>
+            <li>
+              <strong>滚轮</strong> - 缩放画布大小
+            </li>
+            <li>
+              <strong>右键拖动</strong> - 框选多个节点
+            </li>
+            <li>
+              <strong>点击节点</strong> - 选中节点（可多选）
+            </li>
+          </ul>
+
+          <h3>✂️ 编辑功能</h3>
+          <ul>
+            <li>
+              <strong>复制/剪切/粘贴</strong> - 使用工具栏按钮或快捷键
+              Ctrl+C/Ctrl+V/Ctrl+X
+            </li>
+            <li>
+              <strong>撤销/重做</strong> - 使用工具栏按钮或快捷键 Ctrl+Z/Ctrl+Y
+            </li>
+          </ul>
+
+          <h3>🎨 视图控制</h3>
+          <ul>
+            <li>
+              <strong>切换布局</strong> - 点击布局图标，选择不同的思维导图结构
+            </li>
+            <li>
+              <strong>切换主题</strong> - 点击主题图标，选择不同的颜色样式
+            </li>
+            <li>
+              <strong>适应画布</strong> - 自动调整视图以显示完整导图
+            </li>
+          </ul>
+        </div>
+      </Modal>
     </EditorContainer>
   );
 }

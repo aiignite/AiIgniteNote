@@ -1,8 +1,9 @@
-import { Suspense, lazy, useEffect, useRef } from "react";
+import { Suspense, lazy } from "react";
 import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { Spin } from "antd";
 import MainLayout from "./components/Layout/MainLayout";
 import { useAuthStore } from "./store/authStore";
+import { useThemeApply, useSystemThemeListener } from "./hooks/useTheme";
 import LoginPage from "./pages/LoginPage";
 
 // 懒加载页面组件
@@ -39,8 +40,9 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 }
 
 function App() {
-  const { token, isAuthenticated } = useAuthStore();
-  const location = useLocation();
+  // 应用主题设置
+  useThemeApply();
+  useSystemThemeListener();
 
   return (
     <Suspense fallback={<PageLoader />}>

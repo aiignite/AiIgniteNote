@@ -1,4 +1,3 @@
 /* 全局样式 */
+@import "./styles/theme.css";
 @import "./styles/index.css";
-
-/* 可以在这里添加更多全局样式 */

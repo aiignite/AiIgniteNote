@@ -5,11 +5,12 @@ import {
   Tag,
   Tooltip,
   Modal,
-  Input as AntInput,
   Space,
   Dropdown,
   Select,
   Empty,
+  Input,
+  ColorPicker,
 } from "antd";
 import {
   SaveOutlined,
@@ -20,12 +21,13 @@ import {
   UploadOutlined,
   FullscreenOutlined,
   FullscreenExitOutlined,
-  ColumnWidthOutlined,
-  EyeOutlined,
+  CheckCircleFilled,
+  LoadingOutlined,
 } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
 import { useNoteStore } from "../../store/noteStore";
 import { useTagStore } from "../../store/tagStore";
+import { useFullscreenStore } from "../../store/fullscreenStore";
 import { useAutoSave } from "../../hooks/useAutoSave";
 import { db } from "../../db";
 import { NoteFileType, NoteMetadata } from "../../types";
@@ -107,34 +109,6 @@ const HeaderRight = styled.div`
   gap: ${SPACING.md};
 `;
 
-const SaveStatusBadge = styled.div<{ $saving: boolean }>`
-  display: flex;
-  align-items: center;
-  gap: ${SPACING.xs};
-  font-size: ${TYPOGRAPHY.fontSize.xs};
-  font-weight: ${TYPOGRAPHY.fontWeight.medium};
-  letter-spacing: ${TYPOGRAPHY.letterSpacing.wide};
-  text-transform: uppercase;
-  color: ${(props) => (props.$saving ? COLORS.accent : COLORS.success)};
-  padding: ${SPACING.xs} ${SPACING.md};
-  border-radius: ${BORDER.radius.full};
-  background: ${(props) =>
-    props.$saving ? COLORS.accent + "15" : COLORS.success + "15"};
-
-  ${(props) =>
-    props.$saving &&
-    css`
-      animation: ${pulse} 1.5s ease-in-out infinite;
-    `}
-
-  .status-dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: currentColor;
-  }
-`;
-
 const TagContainer = styled.div`
   display: flex;
   gap: ${SPACING.xs};
@@ -165,59 +139,61 @@ const StyledTag = styled(Tag)`
   }
 `;
 
-const AddTagButton = styled(Button)`
-  height: 24px;
-  border-radius: ${BORDER.radius.full};
-  border: 1px dashed ${COLORS.subtle};
-  background: transparent;
-  color: ${COLORS.inkMuted};
-  font-size: ${TYPOGRAPHY.fontSize.xs};
-  padding: 0 ${SPACING.sm};
-  transition: all ${TRANSITION.fast};
-
-  &:hover {
-    border-color: ${COLORS.ink};
-    color: ${COLORS.ink};
-  }
-`;
-
-const ActionButton = styled(Button)`
+// 统一的编辑器工具栏按钮样式（仅图标）
+const EditorToolbarButton = styled(Button)<{
+  $saving?: boolean;
+  $saved?: boolean;
+}>`
+  width: 36px;
   height: 36px;
+  padding: 0;
   border-radius: ${BORDER.radius.sm};
-  font-size: ${TYPOGRAPHY.fontSize.sm};
+  display: flex;
+  align-items: center;
+  justify-content: center;
   transition: all ${TRANSITION.normal};
 
   &.ant-btn-default {
     border-color: ${COLORS.subtle};
     color: ${COLORS.inkLight};
+    background: transparent;
 
     &:hover {
       border-color: ${COLORS.ink};
       color: ${COLORS.ink};
+      background: ${COLORS.subtleLight};
+    }
+
+    .anticon {
+      font-size: 16px;
     }
   }
 
-  &.ant-btn-dangerous {
-    border-color: ${COLORS.subtle};
-    color: ${COLORS.error};
-
-    &:hover {
-      border-color: ${COLORS.error};
-      background: ${COLORS.error};
-      color: ${COLORS.paper};
-    }
-  }
-
-  &.ant-btn-primary {
-    background: ${COLORS.ink};
-    border-color: ${COLORS.ink};
-    color: ${COLORS.paper};
-
-    &:hover {
-      background: ${COLORS.accent};
+  // 保存按钮状态样式
+  ${(props) =>
+    props.$saving &&
+    css`
+      color: ${COLORS.accent};
       border-color: ${COLORS.accent};
-    }
-  }
+      background: ${COLORS.accent}15;
+      animation: ${pulse} 1.5s ease-in-out infinite;
+
+      .anticon {
+        color: ${COLORS.accent};
+      }
+    `}
+
+  ${(props) =>
+    props.$saved &&
+    css`
+      color: ${COLORS.success};
+      border-color: ${COLORS.success};
+      background: ${COLORS.success}15;
+
+      .anticon {
+        color: ${COLORS.success};
+      }
+    `}
 `;
 
 const EditorContent = styled.div`
@@ -282,12 +258,6 @@ const CreateButton = styled(Button)`
   }
 `;
 
-const EditorControls = styled.div`
-  display: flex;
-  align-items: center;
-  gap: ${SPACING.sm};
-`;
-
 // ============================================
 // Main Component
 // ============================================
@@ -295,9 +265,6 @@ const EditorControls = styled.div`
 interface NoteEditorProps {
   noteId?: string;
 }
-
-// 预览模式类型
-type PreviewMode = "edit" | "live" | "preview";
 
 function NoteEditor({ noteId }: NoteEditorProps) {
   const navigate = useNavigate();
@@ -313,13 +280,14 @@ function NoteEditor({ noteId }: NoteEditorProps) {
   const [tagIds, setTagIds] = useState<string[]>([]); // 改为存储标签ID
   const [saving, setSaving] = useState(false);
   const [tagModalVisible, setTagModalVisible] = useState(false);
+  const [newTagName, setNewTagName] = useState("");
+  const [newTagColor, setNewTagColor] = useState("#108ee9");
 
   // 当前文件类型状态
   const [fileType, setFileType] = useState<NoteFileType>(NoteFileType.MARKDOWN);
 
-  // 编辑器控制状态
-  const [isFullscreen, setIsFullscreen] = useState(false);
-  const [previewMode, setPreviewMode] = useState<PreviewMode>("live");
+  // 编辑器控制状态 - 使用全局全屏状态
+  const { isFullscreen, setFullscreen } = useFullscreenStore();
 
   // 初始化编辑器
   useEffect(() => {
@@ -361,7 +329,7 @@ function NoteEditor({ noteId }: NoteEditorProps) {
     noteId,
     title,
     content,
-    tagIds,
+    tags: tagIds,
     onSave: async () => {
       if (!noteId) return;
       setSaving(true);
@@ -425,16 +393,49 @@ function NoteEditor({ noteId }: NoteEditorProps) {
     }
   };
 
-  // 添加标签
-  const handleAddTag = (tagId: string) => {
-    if (!tagIds.includes(tagId)) {
-      setTagIds([...tagIds, tagId]);
-    }
-  };
-
   // 删除标签
   const handleRemoveTag = (tagIdToRemove: string) => {
     setTagIds(tagIds.filter((id) => id !== tagIdToRemove));
+  };
+
+  // 创建新标签
+  const handleCreateTag = async () => {
+    if (!newTagName.trim()) {
+      message.warning("请输入标签名称");
+      return;
+    }
+
+    try {
+      // 生成唯一 ID
+      const newTagId = `tag-${Date.now()}`;
+      const now = Date.now();
+      const newTag = {
+        id: newTagId,
+        name: newTagName.trim(),
+        color: newTagColor,
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      // 保存到 IndexedDB
+      await db.tags.add(newTag);
+
+      // 手动更新 tagStore 中的标签列表（不重新加载，避免覆盖新标签）
+      const { tags: currentTags } = useTagStore.getState();
+      useTagStore.setState({ tags: [...currentTags, newTag] });
+
+      // 清空输入
+      setNewTagName("");
+      setNewTagColor("#108ee9");
+
+      // 自动选中新创建的标签
+      setTagIds([...tagIds, newTagId]);
+
+      message.success("标签创建成功");
+    } catch (error) {
+      console.error("Failed to create tag:", error);
+      message.error("创建失败");
+    }
   };
 
   // 导入功能
@@ -554,81 +555,42 @@ function NoteEditor({ noteId }: NoteEditorProps) {
                 </StyledTag>
               ))}
             {tagIds.length > 3 && <StyledTag>+{tagIds.length - 3}</StyledTag>}
-            <Tooltip title="添加标签">
-              <AddTagButton
-                icon={<TagsOutlined />}
-                size="small"
-                onClick={() => setTagModalVisible(true)}
-              />
-            </Tooltip>
           </TagContainer>
         </HeaderLeft>
 
         <HeaderRight>
-          {/* 编辑器控制按钮 */}
-          {fileType === NoteFileType.MARKDOWN && (
-            <EditorControls>
-              <Dropdown
-                menu={{
-                  items: [
-                    { key: "edit", label: "仅编辑", icon: <EditOutlined /> },
-                    {
-                      key: "live",
-                      label: "实时预览",
-                      icon: <ColumnWidthOutlined />,
-                    },
-                    { key: "preview", label: "仅预览", icon: <EyeOutlined /> },
-                  ],
-                  onClick: ({ key }) => setPreviewMode(key as PreviewMode),
-                }}
-              >
-                <Button icon={<ColumnWidthOutlined />}>
-                  {previewMode === "edit"
-                    ? "仅编辑"
-                    : previewMode === "preview"
-                      ? "仅预览"
-                      : "实时预览"}
-                </Button>
-              </Dropdown>
-              <Button
-                icon={
-                  isFullscreen ? (
-                    <FullscreenExitOutlined />
-                  ) : (
-                    <FullscreenOutlined />
-                  )
-                }
-                onClick={() => setIsFullscreen(!isFullscreen)}
-              >
-                {isFullscreen ? "退出全屏" : "全屏"}
-              </Button>
-            </EditorControls>
-          )}
+          {/* 标签按钮 */}
+          <Tooltip title="管理标签">
+            <EditorToolbarButton
+              icon={<TagsOutlined />}
+              onClick={() => setTagModalVisible(true)}
+            />
+          </Tooltip>
 
           {/* 导入按钮 */}
-          <Button
-            icon={<UploadOutlined />}
-            onClick={() => {
-              const input = document.createElement("input");
-              input.type = "file";
-              const acceptMap: Record<NoteFileType, string> = {
-                [NoteFileType.MARKDOWN]: ".md,.markdown,.txt",
-                [NoteFileType.RICH_TEXT]: ".txt,.html",
-                [NoteFileType.MONACO]:
-                  ".js,.ts,.jsx,.tsx,.py,.java,.cpp,.c,.go,.rs,.php,.sql,.yaml,.xml,.json",
-                [NoteFileType.DRAWIO]: ".drawio,.xml",
-                [NoteFileType.MINDMAP]: ".json,.md",
-              };
-              input.accept = acceptMap[fileType] || "*";
-              input.onchange = (e) => {
-                const file = (e.target as HTMLInputElement).files?.[0];
-                if (file) handleImport(file);
-              };
-              input.click();
-            }}
-          >
-            导入
-          </Button>
+          <Tooltip title="导入文件">
+            <EditorToolbarButton
+              icon={<UploadOutlined />}
+              onClick={() => {
+                const input = document.createElement("input");
+                input.type = "file";
+                const acceptMap: Record<NoteFileType, string> = {
+                  [NoteFileType.MARKDOWN]: ".md,.markdown,.txt",
+                  [NoteFileType.RICH_TEXT]: ".txt,.html",
+                  [NoteFileType.MONACO]:
+                    ".js,.ts,.jsx,.tsx,.py,.java,.cpp,.c,.go,.rs,.php,.sql,.yaml,.xml,.json",
+                  [NoteFileType.DRAWIO]: ".drawio,.xml",
+                  [NoteFileType.MINDMAP]: ".json,.md",
+                };
+                input.accept = acceptMap[fileType] || "*";
+                input.onchange = (e) => {
+                  const file = (e.target as HTMLInputElement).files?.[0];
+                  if (file) handleImport(file);
+                };
+                input.click();
+              }}
+            />
+          </Tooltip>
 
           {/* 导出按钮 */}
           <Dropdown
@@ -637,20 +599,46 @@ function NoteEditor({ noteId }: NoteEditorProps) {
               onClick: ({ key }) => handleExport(key as any),
             }}
           >
-            <Button icon={<DownloadOutlined />}>导出</Button>
+            <Tooltip title="导出文件">
+              <EditorToolbarButton icon={<DownloadOutlined />} />
+            </Tooltip>
           </Dropdown>
 
-          <SaveStatusBadge $saving={saving}>
-            <span className="status-dot" />
-            {saveStatus}
-          </SaveStatusBadge>
-          <ActionButton
-            icon={<SaveOutlined />}
-            loading={saving}
-            onClick={handleManualSave}
+          {/* 保存按钮 - 带状态指示 */}
+          <Tooltip
+            title={
+              saving ? "保存中..." : saveStatus === "已保存" ? "已保存" : "保存"
+            }
           >
-            保存
-          </ActionButton>
+            <EditorToolbarButton
+              icon={
+                saving ? (
+                  <LoadingOutlined />
+                ) : saveStatus === "已保存" ? (
+                  <CheckCircleFilled />
+                ) : (
+                  <SaveOutlined />
+                )
+              }
+              $saving={saving}
+              $saved={!saving && saveStatus === "已保存"}
+              onClick={handleManualSave}
+            />
+          </Tooltip>
+
+          {/* 全屏按钮 */}
+          <Tooltip title={isFullscreen ? "退出全屏" : "全屏"}>
+            <EditorToolbarButton
+              icon={
+                isFullscreen ? (
+                  <FullscreenExitOutlined />
+                ) : (
+                  <FullscreenOutlined />
+                )
+              }
+              onClick={() => setFullscreen(!isFullscreen)}
+            />
+          </Tooltip>
         </HeaderRight>
       </EditorHeader>
 
@@ -667,10 +655,8 @@ function NoteEditor({ noteId }: NoteEditorProps) {
               onChange={handleContentChange}
               onTitleChange={setTitle}
               onSave={handleManualSave}
-              previewMode={previewMode}
-              onPreviewModeChange={setPreviewMode}
               isFullscreen={isFullscreen}
-              onFullscreenChange={setIsFullscreen}
+              onFullscreenChange={setFullscreen}
             />
           )}
         </EditorWrapper>
@@ -686,6 +672,7 @@ function NoteEditor({ noteId }: NoteEditorProps) {
         cancelText="取消"
         width={500}
       >
+        {/* 选择标签 */}
         <div style={{ marginBottom: 16 }}>
           <Select
             mode="multiple"
@@ -708,12 +695,15 @@ function NoteEditor({ noteId }: NoteEditorProps) {
             }
           />
         </div>
+
+        {/* 已选标签展示 */}
         <div
           style={{
             padding: 16,
             background: COLORS.background,
             borderRadius: BORDER.radius.sm,
             minHeight: 80,
+            marginBottom: 16,
           }}
         >
           {tagIds.length === 0 ? (
@@ -739,8 +729,41 @@ function NoteEditor({ noteId }: NoteEditorProps) {
             </Space>
           )}
         </div>
-        <div style={{ marginTop: 12, fontSize: 12, color: COLORS.inkMuted }}>
-          💡 提示：您可以在"设置 → 标签管理"中创建新标签
+
+        {/* 创建新标签 */}
+        <div
+          style={{
+            padding: 16,
+            background: COLORS.paper,
+            borderRadius: BORDER.radius.sm,
+            border: `1px solid ${COLORS.subtle}`,
+          }}
+        >
+          <div style={{ marginBottom: 12, fontWeight: 600, fontSize: 14 }}>
+            创建新标签
+          </div>
+          <Space style={{ width: "100%" }}>
+            <Input
+              style={{ width: 200 }}
+              placeholder="标签名称"
+              value={newTagName}
+              onChange={(e) => setNewTagName(e.target.value)}
+              onPressEnter={handleCreateTag}
+            />
+            <ColorPicker
+              value={newTagColor}
+              onChange={(color) => setNewTagColor(color.toHexString())}
+              showText
+              format="hex"
+            />
+            <Button
+              type="primary"
+              icon={<PlusOutlined />}
+              onClick={handleCreateTag}
+            >
+              创建
+            </Button>
+          </Space>
         </div>
       </Modal>
     </EditorContainer>

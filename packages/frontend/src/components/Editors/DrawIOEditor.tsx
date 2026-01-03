@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { Spin, Input } from "antd";
 import styled from "styled-components";
-import { TYPOGRAPHY } from "../../styles/design-tokens";
 import type { EditorProps } from "./BaseEditor";
 
 const EditorContainer = styled.div`
@@ -26,17 +25,6 @@ const TitleInput = styled(Input)`
   &:focus {
     box-shadow: none;
   }
-`;
-
-const Toolbar = styled.div`
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  padding: 8px 16px;
-  background: var(--bg-secondary);
-  border-bottom: 1px solid var(--border-color);
-  font-weight: 500;
-  font-size: ${TYPOGRAPHY?.fontSize?.sm || "14px"};
 `;
 
 const LoadingOverlay = styled.div`
@@ -220,10 +208,6 @@ function DrawIOEditor({
         onChange={(e) => onTitleChange(e.target.value)}
         variant="borderless"
       />
-
-      <Toolbar>
-        <span>DrawIO 图表</span>
-      </Toolbar>
 
       <div style={{ flex: 1, position: "relative" }}>
         {isLoading && (

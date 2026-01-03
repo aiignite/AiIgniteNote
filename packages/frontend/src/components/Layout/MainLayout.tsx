@@ -6,6 +6,7 @@ import Header from "./Header";
 import AIAssistantSidebar from "../AIAssistant/AIAssistantSidebar";
 import { useNoteStore } from "../../store/noteStore";
 import { useModelStore } from "../../store/modelStore";
+import { useFullscreenStore } from "../../store/fullscreenStore";
 import { initializeDatabase } from "../../db";
 import { useGlobalKeyboardShortcuts } from "../../hooks/useKeyboardShortcuts";
 import styled, { keyframes } from "styled-components";
@@ -66,12 +67,16 @@ const MainGrid = styled.div<{
   $aiWidth: number;
   $sidebarCollapsed: boolean;
   $aiVisible: boolean;
+  $fullscreen?: boolean;
 }>`
   display: grid;
   grid-template-columns: ${(props) =>
-      props.$sidebarCollapsed ? "64px" : `${props.$sidebarWidth}px`} 1fr ${(
-      props,
-    ) => (props.$aiVisible ? `${props.$aiWidth}px` : "0px")};
+      props.$fullscreen
+        ? "0px 1fr 0px"
+        : props.$sidebarCollapsed
+          ? "64px"
+          : `${props.$sidebarWidth}px`} 1fr ${(props) =>
+      props.$aiVisible ? `${props.$aiWidth}px` : "0px"};
   height: 100vh;
   transition: grid-template-columns ${TRANSITION.normal};
   position: relative;
@@ -79,7 +84,11 @@ const MainGrid = styled.div<{
 
   @media (max-width: 1200px) {
     grid-template-columns: ${(props) =>
-        props.$sidebarCollapsed ? "64px" : `${props.$sidebarWidth}px`} 1fr 0px;
+        props.$fullscreen
+          ? "0px 1fr 0px"
+          : props.$sidebarCollapsed
+            ? "64px"
+            : `${props.$sidebarWidth}px`} 1fr 0px;
   }
 
   @media (max-width: 768px) {
@@ -162,6 +171,7 @@ const AIWrapper = styled.div<{ $visible: boolean }>`
 
 function MainLayout() {
   const location = useLocation();
+  const { isFullscreen } = useFullscreenStore();
   const [aiAssistantVisible, setAiAssistantVisible] = useState(true);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [aiAssistantWidth, setAiAssistantWidth] = useState(380);
@@ -210,32 +220,37 @@ function MainLayout() {
         $aiWidth={aiAssistantWidth}
         $sidebarCollapsed={sidebarCollapsed}
         $aiVisible={showAIAssistant && aiAssistantVisible && !isSmallScreen}
+        $fullscreen={isFullscreen}
       >
-        {/* 左侧边栏 */}
-        <SidebarWrapper $collapsed={sidebarCollapsed}>
-          <Sidebar
-            collapsed={sidebarCollapsed}
-            onCollapse={setSidebarCollapsed}
-          />
-        </SidebarWrapper>
+        {/* 左侧边栏 - 全屏时隐藏 */}
+        {!isFullscreen && (
+          <SidebarWrapper $collapsed={sidebarCollapsed}>
+            <Sidebar
+              collapsed={sidebarCollapsed}
+              onCollapse={setSidebarCollapsed}
+            />
+          </SidebarWrapper>
+        )}
 
         {/* 中间内容区 */}
         <ContentArea>
-          <HeaderWrapper>
-            <Header
-              toggleAIAssistant={() =>
-                setAiAssistantVisible(!aiAssistantVisible)
-              }
-              aiAssistantVisible={showAIAssistant && aiAssistantVisible}
-            />
-          </HeaderWrapper>
+          {!isFullscreen && (
+            <HeaderWrapper>
+              <Header
+                toggleAIAssistant={() =>
+                  setAiAssistantVisible(!aiAssistantVisible)
+                }
+                aiAssistantVisible={showAIAssistant && aiAssistantVisible}
+              />
+            </HeaderWrapper>
+          )}
           <ContentWrapper>
             <Outlet />
           </ContentWrapper>
         </ContentArea>
 
-        {/* 右侧AI助手 */}
-        {showAIAssistant && (
+        {/* 右侧AI助手 - 全屏时隐藏 */}
+        {!isFullscreen && showAIAssistant && (
           <AIWrapper
             $visible={aiAssistantVisible && !isSmallScreen}
             style={{

@@ -26,13 +26,17 @@ const TitleInput = styled.input`
   }
 `;
 
+interface MarkdownEditorProps extends EditorProps {
+  previewMode?: "edit" | "live" | "preview";
+}
+
 function MarkdownEditor({
   title,
   content,
   onChange,
   onTitleChange,
   previewMode = "live",
-}: EditorProps) {
+}: MarkdownEditorProps) {
   return (
     <EditorWrapper>
       <TitleInput
@@ -70,6 +74,7 @@ function MarkdownEditor({
           ]}
           extraCommands={[
             commands.codeEdit,
+            commands.codeLive,
             commands.codePreview,
             commands.divider,
             commands.help,

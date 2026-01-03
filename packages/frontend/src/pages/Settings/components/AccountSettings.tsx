@@ -17,7 +17,7 @@ import {
 // ============================================
 
 const SectionContainer = styled.div`
-  max-width: 680px;
+  width: 100%;
 `;
 
 const Card = styled.section`

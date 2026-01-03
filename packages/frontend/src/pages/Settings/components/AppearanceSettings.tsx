@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Form, Slider, Switch, Button, message, Select } from "antd";
+import { Slider, Switch, Button, message, Select } from "antd";
 import styled from "styled-components";
 import {
   COLORS,
@@ -9,13 +9,38 @@ import {
   SHADOW,
   TRANSITION,
 } from "../../../styles/design-tokens";
+import {
+  useThemeStore,
+  FONT_FAMILIES,
+  EDITOR_THEMES,
+  type ThemeMode,
+} from "../../../store/themeStore";
 
 // ============================================
 // Styled Components
 // ============================================
 
 const SectionContainer = styled.div`
-  max-width: 680px;
+  width: 100%;
+`;
+
+const TitleSection = styled.div`
+  margin-bottom: ${SPACING.xl};
+
+  h2 {
+    font-family: ${TYPOGRAPHY.fontFamily.display};
+    font-size: ${TYPOGRAPHY.fontSize["2xl"]};
+    font-weight: ${TYPOGRAPHY.fontWeight.semibold};
+    color: ${COLORS.ink};
+    margin: 0 0 ${SPACING.xs} 0;
+    letter-spacing: ${TYPOGRAPHY.letterSpacing.tight};
+  }
+
+  p {
+    font-size: ${TYPOGRAPHY.fontSize.sm};
+    color: ${COLORS.inkLight};
+    margin: 0;
+  }
 `;
 
 const CardSection = styled.section`
@@ -67,20 +92,30 @@ const ThemePreview = styled.div<{ $active: boolean }>`
 `;
 
 const DarkThemePreview = styled(ThemePreview)`
-  background: ${COLORS.dark.background};
-  color: ${COLORS.dark.ink};
+  background: #1a1a1a;
+  color: #e8e8e8;
+
+  &:hover {
+    background: #242424;
+  }
 `;
 
-const StyledForm = styled(Form)`
-  .ant-form-item {
-    margin-bottom: ${SPACING.lg};
-  }
+const PrimaryButton = styled(Button)`
+  height: 40px;
+  padding: 0 ${SPACING.xl};
+  background: ${COLORS.ink};
+  border-color: ${COLORS.ink};
+  border-radius: ${BORDER.radius.sm};
+  color: ${COLORS.paper};
+  font-weight: ${TYPOGRAPHY.fontWeight.medium};
+  font-size: ${TYPOGRAPHY.fontSize.sm};
+  transition: all ${TRANSITION.normal};
 
-  .ant-form-item-label > label {
-    font-size: ${TYPOGRAPHY.fontSize.sm};
-    font-weight: ${TYPOGRAPHY.fontWeight.medium};
-    color: ${COLORS.ink};
-    height: auto;
+  &:hover {
+    background: ${COLORS.accent};
+    border-color: ${COLORS.accent};
+    transform: translateY(-1px);
+    box-shadow: ${SHADOW.accent};
   }
 `;
 
@@ -119,76 +154,114 @@ const StyledSelect = styled(Select)`
   }
 `;
 
-const PrimaryButton = styled(Button)`
-  height: 40px;
-  padding: 0 ${SPACING.xl};
-  background: ${COLORS.ink};
-  border-color: ${COLORS.ink};
-  border-radius: ${BORDER.radius.sm};
-  color: ${COLORS.paper};
-  font-weight: ${TYPOGRAPHY.fontWeight.medium};
-  font-size: ${TYPOGRAPHY.fontSize.sm};
-  transition: all ${TRANSITION.normal};
-
-  &:hover {
-    background: ${COLORS.accent};
-    border-color: ${COLORS.accent};
-    transform: translateY(-1px);
-    box-shadow: ${SHADOW.accent};
-  }
-`;
-
-const SwitchLabel = styled.div`
+const SettingRow = styled.div`
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: ${SPACING.md} 0;
-  border-bottom: 1px solid ${COLORS.subtleLight};
 
-  &:last-child {
-    border-bottom: none;
+  .setting-info {
+    flex: 1;
+
+    .setting-label {
+      font-size: ${TYPOGRAPHY.fontSize.sm};
+      font-weight: ${TYPOGRAPHY.fontWeight.medium};
+      color: ${COLORS.ink};
+      margin-bottom: 2px;
+    }
+
+    .setting-desc {
+      font-size: ${TYPOGRAPHY.fontSize.xs};
+      color: ${COLORS.inkMuted};
+    }
   }
 
-  .label-text {
-    font-size: ${TYPOGRAPHY.fontSize.sm};
-    color: ${COLORS.ink};
-  }
-
-  .label-desc {
-    font-size: ${TYPOGRAPHY.fontSize.xs};
-    color: ${COLORS.inkMuted};
-    margin-top: 2px;
+  .setting-control {
+    margin-left: ${SPACING.lg};
   }
 `;
 
 // ============================================
 // Main Component
 // ============================================
-
 export default function AppearanceSettings() {
-  const [form] = Form.useForm();
-  const [selectedTheme, setSelectedTheme] = useState<string>("light");
+  const themeStore = useThemeStore();
 
-  const handleSave = async (values: unknown) => {
-    const { theme, fontSize, fontFamily, editorTheme } = values as {
-      theme: string;
-      fontSize: number;
-      fontFamily: string;
-      editorTheme: string;
-    };
-    try {
-      localStorage.setItem("theme", theme);
-      localStorage.setItem("fontSize", fontSize.toString());
-      localStorage.setItem("fontFamily", fontFamily);
-      localStorage.setItem("editorTheme", editorTheme);
-      message.success("外观设置已保存");
-    } catch (error) {
-      message.error("保存失败");
+  const {
+    theme,
+    fontSize,
+    fontFamily,
+    editorTheme,
+    showLineNumbers,
+    codeFolding,
+    autoSave,
+    spellCheck,
+  } = themeStore;
+
+  const [localTheme, setLocalTheme] = useState<ThemeMode>(theme);
+  const [localFontSize, setLocalFontSize] = useState(fontSize);
+
+  // 实时预览字体大小变化
+  const handleFontSizeChange = (value: number) => {
+    setLocalFontSize(value);
+    themeStore.setFontSize(value);
+  };
+
+  // 主题切换
+  const handleThemeChange = (newTheme: ThemeMode) => {
+    setLocalTheme(newTheme);
+    themeStore.setTheme(newTheme);
+  };
+
+  // 字体切换
+  const handleFontFamilyChange = (value: unknown) => {
+    themeStore.setFontFamily(value as string);
+    message.success("字体已切换");
+  };
+
+  // 编辑器主题切换
+  const handleEditorThemeChange = (value: unknown) => {
+    themeStore.setEditorTheme(value as string);
+    message.success("编辑器主题已切换");
+  };
+
+  // 编辑器设置切换
+  const handleEditorSettingChange = (
+    key: "showLineNumbers" | "codeFolding" | "autoSave" | "spellCheck",
+    value: boolean,
+  ) => {
+    switch (key) {
+      case "showLineNumbers":
+        themeStore.setShowLineNumbers(value);
+        break;
+      case "codeFolding":
+        themeStore.setCodeFolding(value);
+        break;
+      case "autoSave":
+        themeStore.setAutoSave(value);
+        break;
+      case "spellCheck":
+        themeStore.setSpellCheck(value);
+        break;
     }
+    message.success("设置已更新");
+  };
+
+  // 重置所有设置
+  const handleReset = () => {
+    themeStore.resetSettings();
+    setLocalTheme("light");
+    setLocalFontSize(14);
+    message.success("外观设置已重置");
   };
 
   return (
     <SectionContainer>
+      <TitleSection>
+        <h2>外观设置</h2>
+        <p>自定义应用的外观和编辑器行为</p>
+      </TitleSection>
+
       {/* 主题设置 */}
       <CardSection>
         <h3>主题</h3>
@@ -196,11 +269,8 @@ export default function AppearanceSettings() {
 
         <div style={{ marginTop: SPACING.lg }}>
           <ThemePreview
-            $active={selectedTheme === "light"}
-            onClick={() => {
-              setSelectedTheme("light");
-              form.setFieldsValue({ theme: "light" });
-            }}
+            $active={localTheme === "light"}
+            onClick={() => handleThemeChange("light")}
           >
             <div style={{ marginBottom: SPACING.sm }}>
               <strong>☀️ 亮色主题</strong>
@@ -209,11 +279,8 @@ export default function AppearanceSettings() {
           </ThemePreview>
 
           <DarkThemePreview
-            $active={selectedTheme === "dark"}
-            onClick={() => {
-              setSelectedTheme("dark");
-              form.setFieldsValue({ theme: "dark" });
-            }}
+            $active={localTheme === "dark"}
+            onClick={() => handleThemeChange("dark")}
           >
             <div style={{ marginBottom: SPACING.sm }}>
               <strong>🌙 暗色主题</strong>
@@ -222,11 +289,8 @@ export default function AppearanceSettings() {
           </DarkThemePreview>
 
           <ThemePreview
-            $active={selectedTheme === "auto"}
-            onClick={() => {
-              setSelectedTheme("auto");
-              form.setFieldsValue({ theme: "auto" });
-            }}
+            $active={localTheme === "auto"}
+            onClick={() => handleThemeChange("auto")}
           >
             <div style={{ marginBottom: SPACING.sm }}>
               <strong>🔄 跟随系统</strong>
@@ -241,100 +305,156 @@ export default function AppearanceSettings() {
         <h3>字体</h3>
         <p>调整文字显示效果</p>
 
-        <StyledForm
-          form={form}
-          layout="vertical"
-          initialValues={{
-            theme: localStorage.getItem("theme") || "light",
-            fontSize: 14,
-            fontFamily: "system",
-            editorTheme: "github",
-          }}
-          onFinish={handleSave}
-        >
-          <Form.Item name="theme" hidden>
-            <input type="hidden" />
-          </Form.Item>
+        <div style={{ marginTop: SPACING.xl }}>
+          <SettingRow>
+            <div className="setting-info">
+              <div className="setting-label">字体大小</div>
+              <div className="setting-desc">当前大小: {localFontSize}px</div>
+            </div>
+            <div className="setting-control" style={{ width: 200 }}>
+              <StyledSlider
+                min={12}
+                max={20}
+                value={localFontSize}
+                onChange={handleFontSizeChange}
+                marks={{
+                  12: "小",
+                  14: "标准",
+                  16: "中",
+                  18: "大",
+                  20: "特大",
+                }}
+              />
+            </div>
+          </SettingRow>
 
-          <Form.Item
-            label="字体大小"
-            name="fontSize"
-            tooltip="调整应用内的文字大小"
-          >
-            <StyledSlider
-              min={12}
-              max={20}
-              marks={{
-                12: "小",
-                14: "标准",
-                16: "中",
-                18: "大",
-                20: "特大",
-              }}
-            />
-          </Form.Item>
+          <SettingRow>
+            <div className="setting-info">
+              <div className="setting-label">字体</div>
+              <div className="setting-desc">选择应用的字体</div>
+            </div>
+            <div className="setting-control">
+              <StyledSelect
+                style={{ width: 200 }}
+                value={fontFamily}
+                onChange={handleFontFamilyChange}
+              >
+                {Object.values(FONT_FAMILIES).map((font) => (
+                  <Select.Option key={font.value} value={font.value}>
+                    {font.label}
+                  </Select.Option>
+                ))}
+              </StyledSelect>
+            </div>
+          </SettingRow>
+        </div>
+      </CardSection>
 
-          <Form.Item label="字体" name="fontFamily">
-            <StyledSelect style={{ width: 240 }}>
-              <Select.Option value="system">系统默认</Select.Option>
-              <Select.Option value="georgia">Georgia</Select.Option>
-              <Select.Option value="arial">Arial</Select.Option>
-              <Select.Option value="helvetica">Helvetica</Select.Option>
-            </StyledSelect>
-          </Form.Item>
+      {/* 编辑器主题 */}
+      <CardSection>
+        <h3>编辑器主题</h3>
+        <p>选择代码和 Markdown 编辑器的配色方案</p>
 
-          <Form.Item label="编辑器主题" name="editorTheme">
-            <StyledSelect style={{ width: 240 }}>
-              <Select.Option value="github">GitHub</Select.Option>
-              <Select.Option value="monokai">Monokai</Select.Option>
-              <Select.Option value="nord">Nord</Select.Option>
-              <Select.Option value="dracula">Dracula</Select.Option>
-            </StyledSelect>
-          </Form.Item>
-
-          <Form.Item>
-            <PrimaryButton htmlType="submit">保存设置</PrimaryButton>
-          </Form.Item>
-        </StyledForm>
+        <div style={{ marginTop: SPACING.xl }}>
+          <SettingRow>
+            <div className="setting-info">
+              <div className="setting-label">编辑器主题</div>
+              <div className="setting-desc">
+                当前: {EDITOR_THEMES[editorTheme]?.label}
+              </div>
+            </div>
+            <div className="setting-control">
+              <StyledSelect
+                style={{ width: 200 }}
+                value={editorTheme}
+                onChange={handleEditorThemeChange}
+              >
+                {Object.values(EDITOR_THEMES).map((theme) => (
+                  <Select.Option key={theme.value} value={theme.value}>
+                    {theme.label}
+                  </Select.Option>
+                ))}
+              </StyledSelect>
+            </div>
+          </SettingRow>
+        </div>
       </CardSection>
 
       {/* 编辑器设置 */}
       <CardSection>
-        <h3>编辑器</h3>
-        <p>自定义编辑器行为</p>
+        <h3>编辑器行为</h3>
+        <p>自定义编辑器的默认行为</p>
 
         <div style={{ marginTop: SPACING.lg }}>
-          <SwitchLabel>
-            <div>
-              <div className="label-text">显示行号</div>
-              <div className="label-desc">在编辑器中显示行号</div>
+          <SettingRow>
+            <div className="setting-info">
+              <div className="setting-label">显示行号</div>
+              <div className="setting-desc">在编辑器中显示行号</div>
             </div>
-            <Switch defaultChecked />
-          </SwitchLabel>
+            <div className="setting-control">
+              <Switch
+                checked={showLineNumbers}
+                onChange={(checked) =>
+                  handleEditorSettingChange("showLineNumbers", checked)
+                }
+              />
+            </div>
+          </SettingRow>
 
-          <SwitchLabel>
-            <div>
-              <div className="label-text">代码折叠</div>
-              <div className="label-desc">允许在编辑器中折叠代码块</div>
+          <SettingRow>
+            <div className="setting-info">
+              <div className="setting-label">代码折叠</div>
+              <div className="setting-desc">允许在编辑器中折叠代码块</div>
             </div>
-            <Switch defaultChecked />
-          </SwitchLabel>
+            <div className="setting-control">
+              <Switch
+                checked={codeFolding}
+                onChange={(checked) =>
+                  handleEditorSettingChange("codeFolding", checked)
+                }
+              />
+            </div>
+          </SettingRow>
 
-          <SwitchLabel>
-            <div>
-              <div className="label-text">自动保存</div>
-              <div className="label-desc">编辑时自动保存笔记</div>
+          <SettingRow>
+            <div className="setting-info">
+              <div className="setting-label">自动保存</div>
+              <div className="setting-desc">编辑时自动保存笔记</div>
             </div>
-            <Switch defaultChecked />
-          </SwitchLabel>
+            <div className="setting-control">
+              <Switch
+                checked={autoSave}
+                onChange={(checked) =>
+                  handleEditorSettingChange("autoSave", checked)
+                }
+              />
+            </div>
+          </SettingRow>
 
-          <SwitchLabel>
-            <div>
-              <div className="label-text">拼写检查</div>
-              <div className="label-desc">实时检查拼写错误</div>
+          <SettingRow>
+            <div className="setting-info">
+              <div className="setting-label">拼写检查</div>
+              <div className="setting-desc">实时检查拼写错误</div>
             </div>
-            <Switch />
-          </SwitchLabel>
+            <div className="setting-control">
+              <Switch
+                checked={spellCheck}
+                onChange={(checked) =>
+                  handleEditorSettingChange("spellCheck", checked)
+                }
+              />
+            </div>
+          </SettingRow>
+        </div>
+      </CardSection>
+
+      {/* 重置按钮 */}
+      <CardSection>
+        <h3>重置设置</h3>
+        <p>将所有外观设置恢复为默认值</p>
+
+        <div style={{ marginTop: SPACING.lg }}>
+          <PrimaryButton onClick={handleReset}>重置所有设置</PrimaryButton>
         </div>
       </CardSection>
     </SectionContainer>

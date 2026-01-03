@@ -8,12 +8,12 @@ import {
   HistoryOutlined,
   BarChartOutlined,
   TeamOutlined,
-  CloudSyncOutlined,
   BgColorsOutlined,
   KeyOutlined,
   InfoCircleOutlined,
   FolderOutlined,
   TagsOutlined,
+  ImportOutlined,
 } from "@ant-design/icons";
 import styled, { keyframes } from "styled-components";
 import {
@@ -44,7 +44,6 @@ const UsageStatisticsPage = lazy(
 const UsersManagement = lazy(
   () => import("./Settings/components/UsersManagement"),
 );
-const SyncSettings = lazy(() => import("./Settings/components/SyncSettings"));
 const AppearanceSettings = lazy(
   () => import("./Settings/components/AppearanceSettings"),
 );
@@ -56,6 +55,9 @@ const CategoriesSettings = lazy(
 );
 const TagsSettings = lazy(() => import("./Settings/components/TagsSettings"));
 const AboutSettings = lazy(() => import("./Settings/components/AboutSettings"));
+const ImportExportSettings = lazy(
+  () => import("./Settings/components/ImportExportSettings"),
+);
 
 // ============================================
 // 动画
@@ -323,10 +325,10 @@ const menuItems: MenuItemConfig[] = [
     section: "团队",
   },
   {
-    key: "sync",
-    icon: <CloudSyncOutlined />,
-    label: "同步设置",
-    description: "配置数据同步和备份",
+    key: "import-export",
+    icon: <ImportOutlined />,
+    label: "导入与导出",
+    description: "备份或迁移您的笔记数据",
     section: "数据",
   },
   {
@@ -347,7 +349,7 @@ const menuItems: MenuItemConfig[] = [
     key: "about",
     icon: <InfoCircleOutlined />,
     label: "关于",
-    description: "关于 AiNote",
+    description: "关于 AIIgniteNote",
     section: "其他",
   },
 ];
@@ -392,8 +394,8 @@ function SettingsPage() {
         return <UsageStatisticsPage />;
       case "users":
         return <UsersManagement />;
-      case "sync":
-        return <SyncSettings />;
+      case "import-export":
+        return <ImportExportSettings />;
       case "appearance":
         return <AppearanceSettings />;
       case "shortcuts":

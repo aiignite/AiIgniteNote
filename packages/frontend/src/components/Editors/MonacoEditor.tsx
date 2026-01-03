@@ -1,15 +1,7 @@
 import Editor from "@monaco-editor/react";
 import { useState, useRef, useCallback } from "react";
 import * as monaco from "monaco-editor";
-import {
-  SaveOutlined,
-  DownloadOutlined,
-  FullscreenOutlined,
-  FullscreenExitOutlined,
-  UndoOutlined,
-  RedoOutlined,
-  SettingOutlined,
-} from "@ant-design/icons";
+import { UndoOutlined, RedoOutlined, SettingOutlined } from "@ant-design/icons";
 import { Button, Space, Divider, Select, Modal, message } from "antd";
 import styled from "styled-components";
 import type { EditorProps } from "./BaseEditor";
@@ -115,10 +107,6 @@ function MonacoEditor({
   metadata,
   onChange,
   onTitleChange,
-  onSave,
-  onDownload,
-  isFullscreen = false,
-  onFullscreenChange,
 }: EditorProps) {
   // 从 metadata 中读取语言设置，如果没有则使用默认值
   const initialSettings: MonacoSettings = {
@@ -133,25 +121,12 @@ function MonacoEditor({
 
   const [settings, setSettings] = useState<MonacoSettings>(initialSettings);
   const [settingsVisible, setSettingsVisible] = useState(false);
-  const [currentFullscreen, setCurrentFullscreen] = useState(isFullscreen);
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
 
   // 编辑器挂载
   const handleEditorDidMount = useCallback(
     (editor: editor.IStandaloneCodeEditor) => {
       editorRef.current = editor;
-
-      // 添加快捷键
-      editor.addCommand(
-        monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS,
-        () => {
-          if (onSave) {
-            onSave();
-            message.success("保存成功");
-          }
-        },
-        "",
-      );
 
       // 添加撤销/重做快捷键
       editor.addCommand(
@@ -169,7 +144,7 @@ function MonacoEditor({
         },
       );
     },
-    [onSave],
+    [],
   );
 
   // 内容变化
@@ -247,36 +222,6 @@ function MonacoEditor({
     [settings, metadata, content, onChange],
   );
 
-  // 切换全屏
-  const toggleFullscreen = useCallback(() => {
-    const newFullscreen = !currentFullscreen;
-    setCurrentFullscreen(newFullscreen);
-    if (onFullscreenChange) {
-      onFullscreenChange(newFullscreen);
-    }
-  }, [currentFullscreen, onFullscreenChange]);
-
-  // 下载文件
-  const handleDownload = useCallback(() => {
-    if (onDownload) {
-      onDownload(settings.language);
-    } else {
-      // 默认下载逻辑
-      const blob = new Blob([content], { type: "text/plain" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `${title || "untitled"}.${getLanguageExtension(
-        settings.language,
-      )}`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      message.success("下载成功");
-    }
-  }, [content, title, settings.language, onDownload]);
-
   // 撤销
   const handleUndo = useCallback(() => {
     editorRef.current?.trigger("", "undo", null);
@@ -291,29 +236,6 @@ function MonacoEditor({
   const handleFormat = useCallback(() => {
     editorRef.current?.getAction("editor.action.formatDocument")?.run();
   }, []);
-
-  // 获取语言扩展名
-  const getLanguageExtension = (language: string): string => {
-    const extensions: Record<string, string> = {
-      javascript: "js",
-      typescript: "ts",
-      html: "html",
-      css: "css",
-      json: "json",
-      python: "py",
-      java: "java",
-      cpp: "cpp",
-      c: "c",
-      go: "go",
-      rust: "rs",
-      php: "php",
-      sql: "sql",
-      yaml: "yaml",
-      xml: "xml",
-      markdown: "md",
-    };
-    return extensions[language] || "txt";
-  };
 
   // 支持的语言
   const languages = [
@@ -417,43 +339,12 @@ function MonacoEditor({
               onClick={() => setSettingsVisible(true)}
               title="设置"
             />
-
-            <Divider type="vertical" />
-
-            {/* 下载/保存/全屏 */}
-            <Button
-              type="text"
-              icon={<DownloadOutlined />}
-              onClick={handleDownload}
-              title="下载"
-            />
-
-            {onSave && (
-              <Button type="primary" icon={<SaveOutlined />} onClick={onSave}>
-                保存 (Ctrl+S)
-              </Button>
-            )}
-
-            {onFullscreenChange && (
-              <Button
-                type="text"
-                icon={
-                  currentFullscreen ? (
-                    <FullscreenExitOutlined />
-                  ) : (
-                    <FullscreenOutlined />
-                  )
-                }
-                onClick={toggleFullscreen}
-                title={currentFullscreen ? "退出全屏" : "全屏"}
-              />
-            )}
           </Space>
         </Toolbar>
       </EditorHeader>
 
       {/* Monaco 编辑器 */}
-      <EditorContainer $isFullscreen={currentFullscreen}>
+      <EditorContainer $isFullscreen={false}>
         <Editor
           height="100%"
           language={settings.language}

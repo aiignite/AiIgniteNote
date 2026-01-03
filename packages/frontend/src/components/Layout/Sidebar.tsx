@@ -30,6 +30,7 @@ import {
   TRANSITION,
   SHADOW,
 } from "../../styles/design-tokens";
+import { BrandLogo } from "../BrandLogo";
 
 // ============================================
 // Styled Components
@@ -74,6 +75,12 @@ const LogoText = styled.div`
     color: ${COLORS.accent};
     font-style: italic;
   }
+`;
+
+const LogoImage = styled.img`
+  height: 28px;
+  width: auto;
+  object-fit: contain;
 `;
 
 const LogoIconCollapsed = styled.div`
@@ -455,10 +462,11 @@ function Sidebar({ collapsed, onCollapse }: SidebarProps) {
           <LogoIconCollapsed>A</LogoIconCollapsed>
         ) : (
           <LogoText>
-            <span className="logo-icon">📝</span>
-            <span className="logo-name">
-              Ai<span className="logo-accent">Note</span>
-            </span>
+            <LogoImage
+              src="/src/assets/AIIgniteNoteSmall.png"
+              alt="AIIgniteNote"
+            />
+            <BrandLogo size="small" />
           </LogoText>
         )}
       </LogoSection>
