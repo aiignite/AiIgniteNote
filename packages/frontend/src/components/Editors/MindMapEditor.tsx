@@ -601,13 +601,38 @@ function MindMapEditor({
         normalizedData.data?.children?.length,
       );
 
-      // 更新思维导图 - 注意 setData 期望的数据格式
-      // 如果 normalizedData 是 {data: {...}} 格式，需要直接传入
-      // 如果是 {root: {data: {...}}} 格式，需要传入 normalizedData.root
-      const dataToSet = normalizedData.root
-        ? normalizedData.root
-        : normalizedData;
-      console.log("[MindMapEditor] 最终传入 setData 的数据:", dataToSet);
+      // 更新思维导图 - 注意 setData 的数据格式
+      // simple-mind-map 的 setData 期望的是纯节点数据对象，不需要包装
+      let dataToSet;
+      if (normalizedData.data && typeof normalizedData.data === "object") {
+        // 这是 {data: {...}} 格式，提取 data 部分
+        dataToSet = normalizedData.data;
+        console.log(
+          "[MindMapEditor] 从AI导入 - 从 {data: {...}} 格式提取 data:",
+          dataToSet,
+        );
+      } else if (normalizedData.root) {
+        // 这是 {root: {...}} 格式，提取 root 部分
+        dataToSet = normalizedData.root;
+        console.log(
+          "[MindMapEditor] 从AI导入 - 从 {root: {...}} 格式提取 root:",
+          dataToSet,
+        );
+      } else {
+        // 直接是节点数据
+        dataToSet = normalizedData;
+        console.log("[MindMapEditor] 从AI导入 - 直接使用节点数据:", dataToSet);
+      }
+
+      console.log(
+        "[MindMapEditor] 从AI导入 - 最终传入 setData 的数据:",
+        dataToSet,
+      );
+      console.log("[MindMapEditor] 从AI导入 - dataToSet.text:", dataToSet.text);
+      console.log(
+        "[MindMapEditor] 从AI导入 - dataToSet.children 数量:",
+        dataToSet.children?.length,
+      );
 
       mindMapRef.current?.setData(dataToSet);
 
@@ -679,13 +704,54 @@ function MindMapEditor({
         normalizedData.data?.children?.length,
       );
 
-      // 更新思维导图 - 注意 setData 期望的数据格式
-      const dataToSet = normalizedData.root
-        ? normalizedData.root
-        : normalizedData;
-      console.log("[MindMapEditor] 最终传入 setData 的数据:", dataToSet);
+      // 更新思维导图 - 注意 setData 的数据格式
+      // simple-mind-map 的 setData 期望的是纯节点数据对象，不需要包装
+      // 如果 normalizedData 是 {data: {...}} 格式，需要提取 data 部分传给 setData
+      // 如果 normalizedData 本身就是节点数据对象（有 text 和 children），直接使用
+      let dataToSet;
+      if (normalizedData.data && typeof normalizedData.data === "object") {
+        // 这是 {data: {...}} 格式，提取 data 部分
+        dataToSet = normalizedData.data;
+        console.log(
+          "[MindMapEditor] 从 {data: {...}} 格式提取 data:",
+          dataToSet,
+        );
+      } else if (normalizedData.root) {
+        // 这是 {root: {...}} 格式，提取 root 部分
+        dataToSet = normalizedData.root;
+        console.log(
+          "[MindMapEditor] 从 {root: {...}} 格式提取 root:",
+          dataToSet,
+        );
+      } else {
+        // 直接是节点数据
+        dataToSet = normalizedData;
+        console.log("[MindMapEditor] 直接使用节点数据:", dataToSet);
+      }
 
-      mindMapRef.current?.setData(dataToSet);
+      console.log("[MindMapEditor] 最终传入 setData 的数据:", dataToSet);
+      console.log("[MindMapEditor] dataToSet.text:", dataToSet.text);
+      console.log(
+        "[MindMapEditor] dataToSet.children 数量:",
+        dataToSet.children?.length,
+      );
+
+      // 使用 setData 方法
+      if (mindMapRef.current) {
+        mindMapRef.current.setData(dataToSet);
+
+        // 强制重新渲染
+        setTimeout(() => {
+          console.log("[MindMapEditor] 触发重新渲染");
+          mindMapRef.current?.render();
+        }, 100);
+
+        // 调整视图以适应新数据
+        setTimeout(() => {
+          console.log("[MindMapEditor] 调整视图适应");
+          mindMapRef.current?.view.fit();
+        }, 200);
+      }
 
       // 保存到笔记
       const jsonString = JSON.stringify(jsonData, null, 2);
