@@ -22,9 +22,11 @@ import {
   OrderedListOutlined,
 } from "@ant-design/icons";
 import { Button, Space, Divider, Upload, Modal, Input, message } from "antd";
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import styled from "styled-components";
 import type { EditorProps } from "./BaseEditor";
+import { useAIStore } from "../../store/aiStore";
+import { NoteFileType } from "../../types";
 
 const EditorWrapper = styled.div`
   height: 100%;
@@ -107,6 +109,7 @@ function RichTextEditor({
   onTitleChange,
   onSave,
 }: EditorProps) {
+  const { setSelectedContent, clearSelectedContent } = useAIStore();
   const [imageModalVisible, setImageModalVisible] = useState(false);
   const [imageUrl, setImageUrl] = useState("");
 
@@ -139,6 +142,51 @@ function RichTextEditor({
       onChange(editor.getHTML());
     },
   });
+
+  // 监听富文本编辑器的选择变化
+  useEffect(() => {
+    if (!editor) return;
+
+    let lastSelectionText = "";
+
+    const handleSelectionUpdate = () => {
+      const { from, to, empty } = editor.state.selection;
+
+      // 如果有选中文本
+      if (!empty && from !== to) {
+        const selectedText = editor.state.doc.textBetween(from, to, " ");
+
+        // 只在文本真正改变时更新，避免重复触发
+        if (selectedText.trim() && selectedText.trim() !== lastSelectionText) {
+          lastSelectionText = selectedText.trim();
+          setSelectedContent({
+            type: "text",
+            source: "richtext",
+            text: selectedText.trim(),
+            metadata: {
+              count: selectedText.length,
+              timestamp: Date.now(),
+            },
+          });
+        }
+      } else {
+        // 只有当有之前的选中文本时才清除
+        if (lastSelectionText) {
+          lastSelectionText = "";
+          clearSelectedContent();
+        }
+      }
+    };
+
+    // 监听编辑器选择变化
+    editor.on("selectionUpdate", handleSelectionUpdate);
+
+    // 不在初始化时检查，避免页面加载时误触发
+
+    return () => {
+      editor.off("selectionUpdate", handleSelectionUpdate);
+    };
+  }, [editor, setSelectedContent, clearSelectedContent]);
 
   // 上传图片
   const handleImageUpload = useCallback(

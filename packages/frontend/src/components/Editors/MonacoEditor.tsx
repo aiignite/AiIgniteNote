@@ -1,11 +1,12 @@
 import Editor from "@monaco-editor/react";
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import * as monaco from "monaco-editor";
 import { UndoOutlined, RedoOutlined, SettingOutlined } from "@ant-design/icons";
 import { Button, Space, Divider, Select, Modal, message } from "antd";
 import styled from "styled-components";
 import type { EditorProps } from "./BaseEditor";
 import type { editor } from "monaco-editor";
+import { useAIStore } from "../../store/aiStore";
 
 const EditorWrapper = styled.div`
   height: 100%;
@@ -108,6 +109,8 @@ function MonacoEditor({
   onChange,
   onTitleChange,
 }: EditorProps) {
+  const { setSelectedContent, clearSelectedContent } = useAIStore();
+
   // 从 metadata 中读取语言设置，如果没有则使用默认值
   const initialSettings: MonacoSettings = {
     ...DEFAULT_SETTINGS,
@@ -143,9 +146,66 @@ function MonacoEditor({
           editor.trigger("", "redo", null);
         },
       );
+
+      // 监听选择变化
+      let lastSelectionText = "";
+
+      const selectionChangeListener = editor.onDidChangeCursorSelection((e) => {
+        const selection = e.selection;
+        const model = editor.getModel();
+
+        if (!model) return;
+
+        // 检查是否有选中文本
+        if (
+          (!selection.isEmpty() &&
+            selection.startLineNumber !== selection.endLineNumber) ||
+          selection.startColumn !== selection.endColumn
+        ) {
+          const selectedText = model.getValueInRange(selection);
+
+          // 只在文本真正改变时更新
+          if (
+            selectedText.trim() &&
+            selectedText.trim() !== lastSelectionText
+          ) {
+            lastSelectionText = selectedText.trim();
+            setSelectedContent({
+              type: "code",
+              source: "monaco",
+              text: selectedText.trim(),
+              metadata: {
+                count: selectedText.length,
+                timestamp: Date.now(),
+              },
+            });
+          }
+        } else {
+          // 只有当有之前的选中文本时才清除
+          if (lastSelectionText) {
+            lastSelectionText = "";
+            clearSelectedContent();
+          }
+        }
+      });
+
+      // 保存监听器引用，用于清理
+      (editorRef as any)._selectionChangeListener = selectionChangeListener;
     },
-    [],
+    [setSelectedContent, clearSelectedContent],
   );
+
+  // 组件卸载时清理监听器
+  useEffect(() => {
+    return () => {
+      if (
+        editorRef.current &&
+        (editorRef.current as any)._selectionChangeListener
+      ) {
+        (editorRef.current as any)._selectionChangeListener.dispose();
+      }
+    };
+  }, []);
 
   // 内容变化
   const handleEditorChange = useCallback(

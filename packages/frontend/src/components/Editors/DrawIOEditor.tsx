@@ -1,7 +1,14 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-import { Spin, Input } from "antd";
+import { Spin, Input, Button, Tooltip, message } from "antd";
+import { SendOutlined } from "@ant-design/icons";
 import styled from "styled-components";
 import type { EditorProps } from "./BaseEditor";
+import { useAIStore } from "../../store/aiStore";
+import {
+  SelectedContent,
+  SelectionHelper,
+  DrawIOElementData,
+} from "../../types/selection";
 
 const EditorContainer = styled.div`
   height: 100%;
@@ -25,6 +32,15 @@ const TitleInput = styled(Input)`
   &:focus {
     box-shadow: none;
   }
+`;
+
+const Toolbar = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
 `;
 
 const LoadingOverlay = styled.div`
@@ -59,7 +75,9 @@ function DrawIOEditor({
 }: EditorProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [selectedElementCount, setSelectedElementCount] = useState(0);
   const currentXmlRef = useRef<string>("");
+  const { setSelectedContent } = useAIStore();
 
   // 使用本地 DrawIO 编辑器，设置语言为简体中文
   const DRAWIO_URL =
@@ -170,6 +188,13 @@ function DrawIOEditor({
         case "exit":
           console.log("[DrawIO] Exit event");
           break;
+
+        // 处理选择变化
+        case "select":
+          const selectedCount = msg.cells?.length || 0;
+          setSelectedElementCount(selectedCount);
+          console.log("[DrawIO] Selected elements:", selectedCount);
+          break;
       }
     };
 
@@ -188,6 +213,88 @@ function DrawIOEditor({
       clearTimeout(timeoutId);
     };
   }, [initialXml, title, metadata, onChange, onSave]);
+
+  // 发送选中元素到 AI 助手
+  const handleSendToAI = useCallback(() => {
+    if (!iframeRef.current) {
+      message.warning("DrawIO 编辑器未加载");
+      return;
+    }
+
+    // 请求 DrawIO 返回选中的元素
+    const requestId = `get_selected_${Date.now()}`;
+    iframeRef.current.contentWindow?.postMessage(
+      JSON.stringify({
+        action: "getSelected",
+        requestId,
+      }),
+      "*",
+    );
+
+    // 设置一次性监听器来接收响应
+    const handleResponse = (event: MessageEvent) => {
+      const msg = event.data;
+      if (typeof msg === "string") {
+        try {
+          const parsed = JSON.parse(msg);
+          if (parsed.requestId === requestId) {
+            // 处理返回的选中元素
+            const elements = parsed.elements || [];
+            if (elements.length === 0) {
+              message.warning("请先选中元素");
+              return;
+            }
+
+            // 提取元素数据
+            const elementDataList: DrawIOElementData[] = elements.map(
+              (el: any) => ({
+                id: el.id,
+                label: el.value || el.label || "",
+                type: el.style?.baseTypeName || "未知",
+                style: el.style,
+              }),
+            );
+
+            // 生成格式化文本
+            const formattedText =
+              SelectionHelper.formatDrawIOElements(elementDataList);
+
+            // 构建选择内容
+            const content: SelectedContent = {
+              type: "drawio_elements",
+              source: "drawio",
+              text: formattedText,
+              raw: elementDataList,
+              metadata: {
+                count: elementDataList.length,
+                hasStructure: false,
+                timestamp: Date.now(),
+              },
+            };
+
+            // 更新 AI Store
+            setSelectedContent(content);
+            message.success(
+              `已将 ${elementDataList.length} 个元素添加到 AI 助手`,
+            );
+
+            // 移除监听器
+            window.removeEventListener("message", handleResponse);
+          }
+        } catch (e) {
+          console.error("[DrawIO] Failed to parse response:", e);
+        }
+      }
+    };
+
+    // 添加临时监听器
+    window.addEventListener("message", handleResponse);
+
+    // 10 秒后自动移除监听器
+    setTimeout(() => {
+      window.removeEventListener("message", handleResponse);
+    }, 10000);
+  }, [setSelectedContent, message]);
 
   // 导出 XML
   const exportXml = useCallback(() => {
@@ -208,6 +315,25 @@ function DrawIOEditor({
         onChange={(e) => onTitleChange(e.target.value)}
         variant="borderless"
       />
+
+      {/* 工具栏 */}
+      <Toolbar>
+        <Tooltip
+          title={`发送选中元素到 AI 助手 ${selectedElementCount > 0 ? `(${selectedElementCount} 个元素)` : ""}`}
+        >
+          <Button
+            type={selectedElementCount > 0 ? "primary" : "default"}
+            icon={<SendOutlined />}
+            onClick={handleSendToAI}
+            size="small"
+            disabled={selectedElementCount === 0 || isLoading}
+          >
+            {selectedElementCount > 0
+              ? `发送 ${selectedElementCount} 个元素`
+              : "发送到 AI 助手"}
+          </Button>
+        </Tooltip>
+      </Toolbar>
 
       <div style={{ flex: 1, position: "relative" }}>
         {isLoading && (

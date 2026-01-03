@@ -18,6 +18,7 @@ export interface NoteMetadata {
     | "fishbone"
     | "timeline"
     | "verticalTimeline";
+  mindmapTheme?: string;
   customConfig?: Record<string, any>;
   // Monaco 编辑器相关配置
   monacoLanguage?: string;

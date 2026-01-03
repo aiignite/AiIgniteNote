@@ -1,9 +1,21 @@
 import { create } from "zustand";
 import { AIConversation, AIMessage } from "../types";
 import { db } from "../db";
-import { aiApi, ChatMessage } from "../lib/api/ai";
+import { aiApi } from "../lib/api/ai";
 import { buildMessagesForAI, getTokenUsage } from "../lib/api/contextManager";
 import { useModelStore } from "./modelStore";
+import {
+  SelectedContent,
+  SelectionHelper,
+  EMPTY_SELECTION,
+} from "../types/selection";
+import {
+  MINDMAP_ASSISTANT_CONFIG,
+  extractMindMapData,
+  formatMindMapForAI,
+  extractMindMapJSONFromResponse,
+  type MindMapClipboardData,
+} from "../prompts/mindmap-prompts";
 
 // ============================================
 // AI 助手类型定义
@@ -80,6 +92,7 @@ export const BUILT_IN_ASSISTANTS: AIAssistant[] = [
     systemPrompt:
       "你是一个专业的摘要助手。请将用户提供的长文本总结成简洁的要点，保留关键信息和核心观点。",
   },
+  MINDMAP_ASSISTANT_CONFIG,
 ];
 
 interface AIStore {
@@ -89,14 +102,17 @@ interface AIStore {
   isStreaming: boolean;
   currentResponse: string;
   selectedText: string;
+  selectedContent: SelectedContent;
   currentAssistant: AIAssistant;
-  customAssistants: AIAssistant[];
-
-  // Actions
+  assistants: AIAssistant[];
+  // 思维导图剪贴板
+  mindmapClipboard: MindMapClipboardData | null;
   loadConversations: (noteId?: string) => Promise<void>;
   createConversation: (noteId?: string) => Promise<AIConversation>;
   setCurrentConversation: (conversation: AIConversation | null) => void;
   setSelectedText: (text: string) => void;
+  setSelectedContent: (content: SelectedContent) => void;
+  clearSelectedContent: () => void;
   addMessage: (
     conversationId: string,
     message: Omit<AIMessage, "id" | "timestamp">,
@@ -116,7 +132,20 @@ interface AIStore {
   updateAssistant: (id: string, updates: Partial<AIAssistant>) => Promise<void>;
   deleteAssistant: (id: string) => Promise<void>;
   getAllAssistants: () => AIAssistant[];
-  assistants: AIAssistant[];
+  // 思维导图剪贴板操作
+  setMindmapClipboard: (data: MindMapClipboardData) => void;
+  clearMindmapClipboard: () => void;
+  getMindmapClipboard: () => MindMapClipboardData | null;
+  sendMindmapToAI: (
+    fullData: any,
+    selectedNodes?: any[],
+    selectedPath?: number[],
+  ) => Promise<void>;
+  importMindmapFromClipboard: () => {
+    success: boolean;
+    data?: any;
+    error?: string;
+  };
 }
 
 export const useAIStore = create<AIStore>((set, get) => ({
@@ -126,8 +155,10 @@ export const useAIStore = create<AIStore>((set, get) => ({
   isStreaming: false,
   currentResponse: "",
   selectedText: "",
+  selectedContent: EMPTY_SELECTION,
   currentAssistant: BUILT_IN_ASSISTANTS[0], // 默认使用通用助手
   assistants: [],
+  mindmapClipboard: null,
 
   loadConversations: async (noteId) => {
     set({ isLoading: true });
@@ -334,7 +365,7 @@ export const useAIStore = create<AIStore>((set, get) => ({
       try {
         const existing = get().assistants.find((a) => a.id === id);
         if (existing && !existing.isBuiltIn) {
-          await db.updateAssistant(id, { ...updates, _pendingSync: true });
+          await db.updateAssistant(id, updates);
           set((state) => ({
             assistants: state.assistants.map((a) =>
               a.id === id ? { ...a, ...updates } : a,
@@ -419,6 +450,24 @@ export const useAIStore = create<AIStore>((set, get) => ({
 
   setSelectedText: (text) => {
     set({ selectedText: text });
+  },
+
+  setSelectedContent: (content) => {
+    // 验证选择内容
+    if (SelectionHelper.isValidSelection(content)) {
+      set({ selectedContent: content });
+      // 同时更新 selectedText 以保持兼容性
+      set({ selectedText: content.text });
+    } else {
+      console.warn("[AIStore] 无效的选择内容，已忽略");
+    }
+  },
+
+  clearSelectedContent: () => {
+    set({
+      selectedContent: EMPTY_SELECTION,
+      selectedText: "",
+    });
   },
 
   addMessage: async (conversationId, message) => {
@@ -677,6 +726,111 @@ export const useAIStore = create<AIStore>((set, get) => ({
   getAllAssistants: () => {
     const { assistants } = get();
     return assistants;
+  },
+
+  // 思维导图剪贴板操作
+  setMindmapClipboard: (data) => {
+    set({ mindmapClipboard: data });
+    console.log("[AIStore] 思维导图数据已保存到剪贴板");
+  },
+
+  clearMindmapClipboard: () => {
+    set({ mindmapClipboard: null });
+    console.log("[AIStore] 思维导图剪贴板已清空");
+  },
+
+  getMindmapClipboard: () => {
+    return get().mindmapClipboard;
+  },
+
+  sendMindmapToAI: async (fullData, selectedNodes, selectedPath) => {
+    // 构建剪贴板数据
+    const clipboardData = extractMindMapData(
+      fullData,
+      selectedNodes,
+      selectedPath,
+    );
+    set({ mindmapClipboard: clipboardData });
+
+    // 格式化为AI可理解的文本
+    const formattedText = formatMindMapForAI(clipboardData);
+
+    // 设置为选中的内容
+    const selectedContent: SelectedContent = {
+      type: "mindmap_nodes",
+      source: "mindmap",
+      text: formattedText,
+      raw: clipboardData,
+      metadata: {
+        count: selectedNodes?.length || 0,
+        maxLevel: selectedPath?.length || 0,
+        hasStructure: true,
+        timestamp: Date.now(),
+      },
+    };
+
+    get().setSelectedContent(selectedContent);
+    console.log(
+      `[AIStore] 已发送思维导图数据到AI助手 (${selectedNodes?.length || 0} 个节点)`,
+    );
+  },
+
+  importMindmapFromClipboard: () => {
+    const { currentResponse, currentConversation } = get();
+
+    console.log("[AIStore] importMindmapFromClipboard 被调用");
+    console.log(
+      "[AIStore] currentResponse 长度:",
+      currentResponse?.length || 0,
+    );
+    console.log("[AIStore] currentConversation 存在:", !!currentConversation);
+
+    // 优先使用 currentResponse(流式响应中的)
+    let responseText = currentResponse;
+
+    // 如果 currentResponse 为空,尝试从对话历史中获取最后一条AI消息
+    if (!responseText && currentConversation) {
+      const messages = currentConversation.messages;
+      if (messages && messages.length > 0) {
+        // 从后往前找最后一条assistant消息
+        for (let i = messages.length - 1; i >= 0; i--) {
+          const msg = messages[i];
+          if (msg.role === "assistant") {
+            responseText = msg.content;
+            console.log("[AIStore] 从对话历史获取AI响应, 消息索引:", i);
+            break;
+          }
+        }
+      }
+    }
+
+    if (!responseText) {
+      console.error("[AIStore] 未找到AI响应内容");
+      return {
+        success: false,
+        error: "AI助手没有生成任何内容,请先与AI对话生成思维导图",
+      };
+    }
+
+    console.log("[AIStore] 准备提取JSON, 响应长度:", responseText.length);
+
+    // 从AI响应中提取JSON
+    const result = extractMindMapJSONFromResponse(responseText);
+
+    if (result.success && result.data) {
+      console.log("[AIStore] 成功从AI响应中提取思维导图JSON");
+      return {
+        success: true,
+        data: result.data,
+      };
+    } else {
+      console.error("[AIStore] 提取思维导图JSON失败:", result.error);
+      return {
+        success: false,
+        error:
+          result.error || '无法提取有效的思维导图数据,请使用"粘贴导入"功能',
+      };
+    }
   },
 }));
 

@@ -28,6 +28,7 @@ import { useNavigate } from "react-router-dom";
 import { useNoteStore } from "../../store/noteStore";
 import { useTagStore } from "../../store/tagStore";
 import { useFullscreenStore } from "../../store/fullscreenStore";
+import { useAIStore } from "../../store/aiStore";
 import { useAutoSave } from "../../hooks/useAutoSave";
 import { db } from "../../db";
 import { NoteFileType, NoteMetadata } from "../../types";
@@ -271,6 +272,7 @@ function NoteEditor({ noteId }: NoteEditorProps) {
   const { message } = App.useApp();
   const { currentNote, setCurrentNote, updateNote, createNote } =
     useNoteStore();
+  const { setCurrentAssistant, assistants } = useAIStore();
   const { tags: allTags, loadTags } = useTagStore();
 
   // 状态管理
@@ -288,6 +290,18 @@ function NoteEditor({ noteId }: NoteEditorProps) {
 
   // 编辑器控制状态 - 使用全局全屏状态
   const { isFullscreen, setFullscreen } = useFullscreenStore();
+
+  // 自动切换到思维导图助手
+  useEffect(() => {
+    if (fileType === NoteFileType.MINDMAP) {
+      // 查找思维导图助手
+      const mindmapAssistant = assistants.find((a) => a.id === "mindmap");
+      if (mindmapAssistant) {
+        setCurrentAssistant(mindmapAssistant);
+        console.log("[NoteEditor] 已自动切换到思维导图助手");
+      }
+    }
+  }, [fileType, assistants, setCurrentAssistant]);
 
   // 初始化编辑器
   useEffect(() => {

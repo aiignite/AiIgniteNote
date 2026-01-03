@@ -13,6 +13,8 @@ import {
   BgColorsOutlined,
   LayoutOutlined,
   QuestionCircleOutlined,
+  SendOutlined,
+  ImportOutlined,
 } from "@ant-design/icons";
 import styled from "styled-components";
 import MindMap from "simple-mind-map";
@@ -20,6 +22,16 @@ import Themes from "simple-mind-map-plugin-themes";
 import MindMapSelect from "simple-mind-map/src/plugins/Select.js";
 import MindMapDrag from "simple-mind-map/src/plugins/Drag.js";
 import type { EditorProps } from "./BaseEditor";
+import { useAIStore } from "../../store/aiStore";
+import {
+  SelectedContent,
+  SelectionHelper,
+  MindMapNodeData,
+} from "../../types/selection";
+import {
+  validateMindMapJSON,
+  extractMindMapJSONFromResponse,
+} from "../../prompts/mindmap-prompts";
 
 // 注册主题插件 (只执行一次)
 if (
@@ -171,6 +183,9 @@ function MindMapEditor({
   const containerRef = useRef<HTMLDivElement>(null);
   const mindMapRef = useRef<any>(null);
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
+  const { setSelectedContent, sendMindmapToAI, importMindmapFromClipboard } =
+    useAIStore();
+
   // 从 metadata 中读取保存的布局和主题,如果没有则使用默认值
   const [currentLayout, setCurrentLayout] = useState(
     metadata?.mindmapLayout || "logicalStructure",
@@ -179,6 +194,7 @@ function MindMapEditor({
     metadata?.mindmapTheme || "classicGreen",
   );
   const [helpVisible, setHelpVisible] = useState(false);
+  const [selectedNodeCount, setSelectedNodeCount] = useState(0);
 
   // 初始化思维导图
   useEffect(() => {
@@ -362,7 +378,7 @@ function MindMapEditor({
     if (!mindMapRef.current) return;
     try {
       mindMapRef.current.setLayout(value);
-      setCurrentLayout(value);
+      setCurrentLayout(value as any);
       const layoutName = layoutOptions.find((o) => o.value === value)?.label;
       message.success(`已切换到${layoutName}`);
 
@@ -474,6 +490,169 @@ function MindMapEditor({
     }
   };
 
+  // 从节点列表提取节点数据
+  const extractNodeData = (nodeList: any[]): MindMapNodeData[] => {
+    if (!nodeList || nodeList.length === 0) return [];
+
+    return nodeList.map((node) => {
+      const data = node.getData();
+      return {
+        text: data.text || "",
+        level: data.layerIndex || 0,
+        id: data.uid || node.id,
+      };
+    });
+  };
+
+  // 发送选中节点到 AI 助手
+  const handleSendToAI = () => {
+    if (!mindMapRef.current) return;
+
+    const activeNodes = mindMapRef.current.renderer.activeNodeList;
+    if (!activeNodes || activeNodes.length === 0) {
+      message.warning("请先选中节点");
+      return;
+    }
+
+    try {
+      // 获取完整数据
+      const fullData = mindMapRef.current.getData(false);
+
+      // 提取节点数据
+      const nodeDataList = extractNodeData(activeNodes);
+
+      // 发送到 AI
+      sendMindmapToAI(fullData, nodeDataList);
+
+      message.success(`已将思维导图数据发送到 AI 助手`);
+    } catch (e) {
+      console.error("发送节点到 AI 失败:", e);
+      message.error("发送失败");
+    }
+  };
+
+  // 从 AI 助手剪贴板导入
+  const handleImportFromAI = () => {
+    const result = importMindmapFromClipboard();
+
+    if (!result.success) {
+      message.error(result.error || "导入失败");
+      return;
+    }
+
+    if (!result.data) {
+      message.error("没有可导入的数据");
+      return;
+    }
+
+    try {
+      // 验证数据结构
+      const validation = validateMindMapJSON(result.data);
+      if (!validation.valid) {
+        message.error(`数据格式错误: ${validation.error}`);
+        return;
+      }
+
+      // 更新思维导图
+      mindMapRef.current?.setData(result.data);
+
+      // 保存到笔记
+      const jsonData = JSON.stringify(result.data, null, 2);
+      onChange(jsonData, {
+        ...metadata,
+        mindmapData: jsonData,
+        mindmapLayout: currentLayout,
+        mindmapTheme: currentTheme,
+      });
+
+      message.success("已从 AI 助手导入思维导图");
+    } catch (error) {
+      console.error("导入失败:", error);
+      message.error("导入失败");
+    }
+  };
+
+  // 从系统剪贴板导入
+  const handleImportFromClipboard = async () => {
+    try {
+      // 从系统剪贴板读取
+      const clipboardText = await navigator.clipboard.readText();
+
+      if (!clipboardText.trim()) {
+        message.warning("剪贴板为空");
+        return;
+      }
+
+      console.log(
+        "[MindMapEditor] 从剪贴板读取的内容长度:",
+        clipboardText.length,
+      );
+
+      // 尝试解析JSON
+      let jsonData;
+      try {
+        jsonData = JSON.parse(clipboardText);
+      } catch (parseError) {
+        // 如果直接解析失败,尝试提取代码块
+        const extractResult = extractMindMapJSONFromResponse(clipboardText);
+        if (extractResult.success && extractResult.data) {
+          jsonData = extractResult.data;
+        } else {
+          message.error("剪贴板内容不是有效的思维导图JSON");
+          return;
+        }
+      }
+
+      // 验证数据结构
+      const validation = validateMindMapJSON(jsonData);
+      if (!validation.valid) {
+        message.error(`数据格式错误: ${validation.error}`);
+        return;
+      }
+
+      // 更新思维导图
+      mindMapRef.current?.setData(jsonData);
+
+      // 保存到笔记
+      const jsonString = JSON.stringify(jsonData, null, 2);
+      onChange(jsonString, {
+        ...metadata,
+        mindmapData: jsonString,
+        mindmapLayout: currentLayout,
+        mindmapTheme: currentTheme,
+      });
+
+      message.success("已从剪贴板导入思维导图");
+    } catch (error) {
+      console.error("从剪贴板导入失败:", error);
+      if (error instanceof Error && error.name === "NotAllowedError") {
+        message.error("无法访问剪贴板,请授予权限或手动粘贴");
+      } else {
+        message.error("导入失败,请确保剪贴板中有有效的JSON数据");
+      }
+    }
+  };
+  useEffect(() => {
+    if (!mindMapRef.current) return;
+
+    const handleNodeSelect = () => {
+      const activeNodes = mindMapRef.current?.renderer.activeNodeList;
+      const count = activeNodes?.length || 0;
+      setSelectedNodeCount(count);
+    };
+
+    // 监听节点选中事件
+    mindMapRef.current.on("node_active", handleNodeSelect);
+    mindMapRef.current.on("node_inactive", handleNodeSelect);
+
+    return () => {
+      if (mindMapRef.current) {
+        mindMapRef.current.off("node_active", handleNodeSelect);
+        mindMapRef.current.off("node_inactive", handleNodeSelect);
+      }
+    };
+  }, []);
+
   return (
     <EditorContainer>
       {/* 标题输入 */}
@@ -494,6 +673,42 @@ function MindMapEditor({
               size="small"
               danger
             />
+          </Tooltip>
+
+          {/* 发送到 AI 助手 */}
+          <Tooltip
+            title={`发送选中节点到 AI 助手 ${selectedNodeCount > 0 ? `(${selectedNodeCount} 个节点)` : ""}`}
+          >
+            <Button
+              type={selectedNodeCount > 0 ? "primary" : "default"}
+              icon={<SendOutlined />}
+              onClick={handleSendToAI}
+              size="small"
+              disabled={selectedNodeCount === 0}
+            />
+          </Tooltip>
+
+          {/* 从 AI 导入 */}
+          <Tooltip title="从 AI 助手导入">
+            <Button
+              type="primary"
+              icon={<ImportOutlined />}
+              onClick={handleImportFromAI}
+              size="small"
+            >
+              从 AI 导入
+            </Button>
+          </Tooltip>
+
+          {/* 从剪贴板导入 */}
+          <Tooltip title="从系统剪贴板导入(支持手工复制)">
+            <Button
+              icon={<CopyOutlined />}
+              onClick={handleImportFromClipboard}
+              size="small"
+            >
+              粘贴导入
+            </Button>
           </Tooltip>
         </Space>
 

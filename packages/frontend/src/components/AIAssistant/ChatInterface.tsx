@@ -12,6 +12,10 @@ import {
   EllipsisOutlined,
   CloseOutlined,
   DeleteOutlined,
+  NodeIndexOutlined,
+  ApartmentOutlined,
+  FileTextOutlined,
+  SettingOutlined,
 } from "@ant-design/icons";
 import { useAIStore } from "../../store/aiStore";
 import { AIConversation } from "../../types";
@@ -25,6 +29,8 @@ import {
   TRANSITION,
   SHADOW,
 } from "../../styles/design-tokens";
+import { SelectionHelper } from "../../types/selection";
+import { SelectionSettingsModal } from "./SelectionSettings";
 
 const { TextArea } = Input;
 
@@ -428,29 +434,52 @@ const InputActions = styled.div`
 `;
 
 const SelectedTextIndicator = styled.div`
-  padding: ${SPACING.xs} ${SPACING.md};
+  padding: ${SPACING.sm} ${SPACING.md};
   background: ${COLORS.accent}15;
   border: 1px solid ${COLORS.accent}40;
-  border-radius: ${BORDER.radius.sm};
+  border-radius: ${BORDER.radius.md};
   font-size: ${TYPOGRAPHY.fontSize.xs};
   color: ${COLORS.accent};
   display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: ${SPACING.xs};
 
-  .selected-text-preview {
-    flex: 1;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    opacity: 0.8;
+  .selected-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-weight: ${TYPOGRAPHY.fontWeight.medium};
+  }
+
+  .selected-source {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .selected-content {
+    background: ${COLORS.paper};
+    border: 1px solid ${COLORS.accent}30;
+    border-radius: ${BORDER.radius.sm};
+    padding: ${SPACING.xs} ${SPACING.sm};
+    font-family: ${TYPOGRAPHY.fontFamily.mono};
+    font-size: ${TYPOGRAPHY.fontSize.xs};
+    color: ${COLORS.ink};
+    max-height: 100px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
   }
 
   .clear-selection {
     cursor: pointer;
-    padding: 2px 6px;
+    padding: 4px 8px;
     border-radius: ${BORDER.radius.sm};
     transition: background ${TRANSITION.fast};
+    background: ${COLORS.accent}20;
+    display: flex;
+    align-items: center;
+    gap: 4px;
 
     &:hover {
       background: ${COLORS.accent}30;
@@ -670,7 +699,7 @@ function CopyButton({ content }: { content: string }) {
 }
 
 // 助手选择下拉组件
-function AssistantSelect() {
+function AssistantSelect({ onOpenSettings }: { onOpenSettings: () => void }) {
   const {
     currentAssistant,
     setCurrentAssistant,
@@ -764,6 +793,9 @@ function AssistantSelect() {
         <Tooltip title="新建对话">
           <IconButton icon={<PlusOutlined />} onClick={handleNewChat} />
         </Tooltip>
+        <Tooltip title="选择内容设置">
+          <IconButton icon={<SettingOutlined />} onClick={onOpenSettings} />
+        </Tooltip>
         <Tooltip title="更多">
           <IconButton
             icon={<EllipsisOutlined />}
@@ -846,14 +878,17 @@ function ChatInterface() {
     sendMessage,
     isStreaming,
     currentResponse,
-    selectedText,
+    selectedContent,
     setSelectedText,
+    clearSelectedContent,
     currentAssistant,
   } = useAIStore();
   const [inputValue, setInputValue] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [abortController, setAbortController] =
     useState<AbortController | null>(null);
+  const [settingsModalVisible, setSettingsModalVisible] = useState(false);
+  const [previousInputValue, setPreviousInputValue] = useState("");
 
   // 获取当前选中的文本
   const getSelectedText = () => {
@@ -861,7 +896,25 @@ function ChatInterface() {
     return selection?.toString().trim() || "";
   };
 
-  // 监听文本选择变化
+  // 获取选择来源的图标
+  const getSourceIcon = () => {
+    switch (selectedContent.source) {
+      case "mindmap":
+        return <NodeIndexOutlined />;
+      case "drawio":
+        return <ApartmentOutlined />;
+      case "richtext":
+        return <FileTextOutlined />;
+      case "markdown":
+        return <FileTextOutlined />;
+      case "monaco":
+        return <FileTextOutlined />;
+      default:
+        return <FileTextOutlined />;
+    }
+  };
+
+  // 监听文本选择变化（保持兼容性）
   useEffect(() => {
     const handleSelectionChange = () => {
       const text = getSelectedText();
@@ -872,7 +925,24 @@ function ChatInterface() {
     return () => {
       document.removeEventListener("selectionchange", handleSelectionChange);
     };
-  }, []);
+  }, [setSelectedText]);
+
+  // 监听选择内容变化，自动填写到输入框
+  useEffect(() => {
+    if (selectedContent.text) {
+      // 保存当前输入框的值
+      setPreviousInputValue(inputValue);
+
+      // 只将选中的纯文本添加到输入框，不加任何描述
+      setInputValue(selectedContent.text);
+    } else {
+      // 清除选择时，恢复之前的值
+      if (previousInputValue) {
+        setInputValue(previousInputValue);
+        setPreviousInputValue("");
+      }
+    }
+  }, [selectedContent]);
 
   // 自动滚动到底部
   useEffect(() => {
@@ -891,18 +961,14 @@ function ChatInterface() {
       return;
     }
 
-    // 获取当前选中的文本
-    const currentSelectedText = getSelectedText();
+    // 输入框已包含选择内容，直接发送即可
+    const messageToSend = inputValue.trim();
 
-    // 构建消息内容
-    let messageToSend = inputValue.trim();
-
-    // 如果有选中文本，将选中文本附加到消息中
-    if (currentSelectedText) {
-      messageToSend = `${inputValue.trim()}\n\n选中的内容：\n${currentSelectedText}`;
-      // 清除选择
-      window.getSelection()?.removeAllRanges();
-    }
+    // 清除选择状态
+    clearSelectedContent();
+    setPreviousInputValue("");
+    // 清除原生文本选择
+    window.getSelection()?.removeAllRanges();
 
     setInputValue("");
 
@@ -944,7 +1010,7 @@ function ChatInterface() {
   // 清除文本选择
   const handleClearSelection = () => {
     window.getSelection()?.removeAllRanges();
-    setSelectedText("");
+    clearSelectedContent();
   };
 
   // 渲染消息内容（支持 Markdown）
@@ -980,7 +1046,7 @@ function ChatInterface() {
           borderBottom: `1px solid ${COLORS.subtle}`,
         }}
       >
-        <AssistantSelect />
+        <AssistantSelect onOpenSettings={() => setSettingsModalVisible(true)} />
       </InputContainer>
 
       {/* 消息列表 */}
@@ -1062,12 +1128,29 @@ function ChatInterface() {
       {/* 输入区域 */}
       <InputContainer>
         {/* 选中文本提示 */}
-        {selectedText && (
+        {selectedContent.text && (
           <SelectedTextIndicator>
-            <span>已选择文档内容，点击发送将包含选中文本</span>
-            <span className="clear-selection" onClick={handleClearSelection}>
-              清除选择
-            </span>
+            <div className="selected-header">
+              <div className="selected-source">
+                {getSourceIcon()}
+                <span>
+                  {SelectionHelper.getSelectionDescription(selectedContent)}
+                </span>
+              </div>
+              <div className="clear-selection" onClick={handleClearSelection}>
+                <CloseOutlined />
+                <span>清除</span>
+              </div>
+            </div>
+            {selectedContent.type === "mindmap_nodes" && (
+              <div className="selected-content">{selectedContent.text}</div>
+            )}
+            {selectedContent.type === "text" &&
+              selectedContent.text.length > 50 && (
+                <div className="selected-content">
+                  {SelectionHelper.truncateText(selectedContent.text, 200)}
+                </div>
+              )}
           </SelectedTextIndicator>
         )}
         <InputWrapper>
@@ -1115,6 +1198,12 @@ function ChatInterface() {
           )}
         </InputActions>
       </InputContainer>
+
+      {/* 选择内容设置弹窗 */}
+      <SelectionSettingsModal
+        visible={settingsModalVisible}
+        onClose={() => setSettingsModalVisible(false)}
+      />
     </ChatContainer>
   );
 }
