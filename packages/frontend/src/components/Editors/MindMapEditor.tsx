@@ -96,21 +96,10 @@ const TitleInput = styled(Input)`
   }
 `;
 
-// 默认思维导图数据
-const defaultMindData: {
-  root: {
-    data: {
-      text: string;
-      children: any[];
-    };
-  };
-} = {
-  root: {
-    data: {
-      text: "中心主题",
-      children: [],
-    },
-  },
+// 默认思维导图数据（simple-mind-map 期望的格式）
+const defaultMindData = {
+  text: "中心主题",
+  children: [],
 };
 
 // 布局选项 - 使用正确的字符串值
@@ -203,7 +192,7 @@ function MindMapEditor({
     if (!containerRef.current) return;
 
     // 解析已有的思维导图数据
-    let initialData: any = defaultMindData.root;
+    let initialData: any = defaultMindData;
     try {
       let parsedData = null;
 
@@ -243,7 +232,7 @@ function MindMapEditor({
       }
     } catch (error) {
       console.error("解析思维导图数据失败:", error);
-      initialData = defaultMindData.root;
+      initialData = defaultMindData;
     }
 
     // 创建思维导图实例

@@ -14,6 +14,7 @@ import {
   extractMindMapData,
   formatMindMapForAI,
   extractMindMapJSONFromResponse,
+  validateMindMapJSON,
   type MindMapClipboardData,
 } from "../prompts/mindmap-prompts";
 
