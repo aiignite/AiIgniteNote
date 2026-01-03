@@ -673,14 +673,6 @@ export const useAIStore = create<AIStore>((set, get) => ({
       );
     }
 
-    // 使用上下文管理服务构建消息（自动处理压缩）
-    const messages = await buildMessagesForAI(
-      updatedConversation,
-      currentAssistant.systemPrompt,
-      {},
-      signal,
-    );
-
     console.log(
       `[上下文管理] 发送消息数: ${messages.length - 1} (不含 system)`,
       `助手配置模型: ${currentAssistant.model}`,
