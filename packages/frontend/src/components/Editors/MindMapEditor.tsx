@@ -98,8 +98,10 @@ const TitleInput = styled(Input)`
 
 // 默认思维导图数据（simple-mind-map 期望的格式）
 const defaultMindData = {
-  text: "中心主题",
-  children: [],
+  data: {
+    text: "中心主题",
+    children: [],
+  },
 };
 
 // 布局选项 - 使用正确的字符串值
@@ -671,9 +673,20 @@ function MindMapEditor({
       // 更新思维导图
       // validateMindMapJSON 已经将数据转换为 simple-mind-map 期望的格式: {text, children}
       // 所以这里直接使用 normalizedData 即可
-      // 使用 setData 方法
+      console.log("[MindMapEditor] 准备调用 setData...");
+      console.log(
+        "[MindMapEditor] mindMapRef.current 是否存在:",
+        !!mindMapRef.current,
+      );
+
       if (mindMapRef.current) {
+        console.log("[MindMapEditor] setData 之前的数据:", normalizedData);
         mindMapRef.current.setData(normalizedData);
+        console.log("[MindMapEditor] setData 调用完成");
+
+        // 检查 setData 后的数据
+        const dataAfterSet = mindMapRef.current.getData(false);
+        console.log("[MindMapEditor] setData 后的数据:", dataAfterSet);
 
         // 强制重新渲染
         setTimeout(() => {
