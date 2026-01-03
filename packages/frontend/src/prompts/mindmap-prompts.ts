@@ -253,7 +253,7 @@ export function validateMindMapJSON(json: any): {
   // simple-mind-map期望的是包含data字段的对象,如 {data: {text: "...", children: [...]}}
   return {
     valid: true,
-    normalized: actualData.data ? actualData : actualData.data,
+    normalized: actualData, // 直接返回 {data: {...}} 格式
   };
 }
 
