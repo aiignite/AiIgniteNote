@@ -201,20 +201,32 @@ function MindMapEditor({
     if (!containerRef.current) return;
 
     // 解析已有的思维导图数据
-    let initialData = defaultMindData;
+    let initialData = defaultMindData.root;
     try {
       if (metadata?.mindmapData) {
         const parsed = JSON.parse(metadata.mindmapData);
-        // 直接使用保存的节点数据,包装成 mindmap 需要的格式
-        initialData = { root: parsed };
+        // 验证并规范化数据
+        const validation = validateMindMapJSON(parsed);
+        if (validation.valid) {
+          initialData = validation.normalized || parsed;
+        } else {
+          console.warn("思维导图数据格式验证失败:", validation.error);
+          initialData = defaultMindData.root;
+        }
       } else if (content) {
         const parsed = JSON.parse(content);
-        // 直接使用保存的节点数据,包装成 mindmap 需要的格式
-        initialData = { root: parsed };
+        // 验证并规范化数据
+        const validation = validateMindMapJSON(parsed);
+        if (validation.valid) {
+          initialData = validation.normalized || parsed;
+        } else {
+          console.warn("思维导图数据格式验证失败:", validation.error);
+          initialData = defaultMindData.root;
+        }
       }
     } catch (error) {
       console.error("解析思维导图数据失败:", error);
-      initialData = defaultMindData;
+      initialData = defaultMindData.root;
     }
 
     // 创建思维导图实例
@@ -553,8 +565,11 @@ function MindMapEditor({
         return;
       }
 
+      // 使用规范化后的数据
+      const normalizedData = validation.normalized || result.data;
+
       // 更新思维导图
-      mindMapRef.current?.setData(result.data);
+      mindMapRef.current?.setData(normalizedData);
 
       // 保存到笔记
       const jsonData = JSON.stringify(result.data, null, 2);
@@ -610,8 +625,11 @@ function MindMapEditor({
         return;
       }
 
+      // 使用规范化后的数据
+      const normalizedData = validation.normalized || jsonData;
+
       // 更新思维导图
-      mindMapRef.current?.setData(jsonData);
+      mindMapRef.current?.setData(normalizedData);
 
       // 保存到笔记
       const jsonString = JSON.stringify(jsonData, null, 2);

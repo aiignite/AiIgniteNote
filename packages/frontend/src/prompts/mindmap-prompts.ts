@@ -215,31 +215,45 @@ export function formatMindMapForAI(data: MindMapClipboardData): string {
 
 /**
  * 验证思维导图JSON结构
+ * 支持两种格式:
+ * 1. 直接格式: { "data": { "text": "...", "children": [...] } }
+ * 2. 包装格式: { "root": { "data": { "text": "...", "children": [...] } } }
  */
 export function validateMindMapJSON(json: any): {
   valid: boolean;
   error?: string;
+  normalized?: any; // 返回规范化后的数据
 } {
   if (!json || typeof json !== "object") {
     return { valid: false, error: "数据不是有效的对象" };
   }
 
-  if (!json.data) {
+  // 如果是包装格式,提取实际的根节点
+  let actualData = json;
+  if (json.root && json.root.data) {
+    actualData = json.root;
+  }
+
+  if (!actualData.data) {
     return { valid: false, error: "缺少必需的 data 字段" };
   }
 
-  if (!json.data.text || typeof json.data.text !== "string") {
+  if (!actualData.data.text || typeof actualData.data.text !== "string") {
     return { valid: false, error: "缺少必需的 data.text 字段(中心主题)" };
   }
 
   // 验证 children 结构
-  if (json.data.children) {
-    if (!Array.isArray(json.data.children)) {
+  if (actualData.data.children) {
+    if (!Array.isArray(actualData.data.children)) {
       return { valid: false, error: "children 必须是数组" };
     }
   }
 
-  return { valid: true };
+  // 返回规范化后的数据(去除可能的包装)
+  return {
+    valid: true,
+    normalized: actualData.data || actualData,
+  };
 }
 
 /**
