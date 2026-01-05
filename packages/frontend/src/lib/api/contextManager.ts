@@ -2,6 +2,13 @@ import { AIMessage, AIConversation } from "../../types";
 import { aiApi, ChatMessage } from "./ai";
 import { isMindMapNote, buildMindMapContext } from "./mindmapContextBuilder";
 import { isDrawIONote, buildDrawIOContext } from "./drawioContextBuilder";
+import { isMonacoNote, buildMonacoContext } from "./monacoContextBuilder";
+import {
+  isTextNote,
+  buildTextContext,
+  getNoteFileType,
+} from "./textContextBuilder";
+import { NoteFileType } from "../../types/local";
 
 // ============================================
 // 配置常量
@@ -204,6 +211,7 @@ export interface ContextManagerConfig {
   compressTarget?: number; // 压缩后目标占比（0-1）
   keepRecentMessages?: number; // 压缩后保留的最近消息数
   currentUserMessage?: string; // 当前正在发送的用户消息（用于思维导图上下文）
+  noteId?: string; // 当前笔记 ID（优先于 conversation.noteId）
 }
 
 /**
@@ -225,14 +233,26 @@ export async function buildMessagesForAI(
   // 检查是否是思维导图笔记,使用专用上下文构建器
   console.log("[ContextManager] buildMessagesForAI 被调用");
   console.log("[ContextManager] conversation.noteId:", conversation.noteId);
+  console.log("[ContextManager] config.noteId:", config.noteId);
 
-  const isMindMap = await isMindMapNote(conversation.noteId);
-  const isDrawIO = await isDrawIONote(conversation.noteId);
+  // 优先使用 config 中的 noteId，其次使用 conversation.noteId
+  const effectiveNoteId = config.noteId || conversation.noteId;
+  console.log("[ContextManager] effectiveNoteId:", effectiveNoteId);
+
+  const isMindMap = await isMindMapNote(effectiveNoteId);
+  const isDrawIO = await isDrawIONote(effectiveNoteId);
+  const isMonaco = await isMonacoNote(effectiveNoteId);
+  const isText = await isTextNote(effectiveNoteId, [
+    NoteFileType.MARKDOWN,
+    NoteFileType.RICH_TEXT,
+  ]);
 
   console.log("[ContextManager] isMindMap 检测结果:", isMindMap);
   console.log("[ContextManager] isDrawIO 检测结果:", isDrawIO);
+  console.log("[ContextManager] isMonaco 检测结果:", isMonaco);
+  console.log("[ContextManager] isText 检测结果:", isText);
 
-  if (isMindMap && conversation.noteId) {
+  if (isMindMap && effectiveNoteId) {
     console.log("[ContextManager] ✅ 检测到思维导图笔记,使用专用上下文构建");
 
     // 使用传入的当前用户消息，或从对话历史中获取
@@ -247,7 +267,7 @@ export async function buildMessagesForAI(
     console.log("[ContextManager] 使用的用户消息:", userMessage);
 
     const result = await buildMindMapContext(
-      conversation.noteId,
+      effectiveNoteId,
       conversation,
       systemPrompt,
       userMessage,
@@ -264,7 +284,7 @@ export async function buildMessagesForAI(
     return result.messages;
   }
 
-  if (isDrawIO && conversation.noteId) {
+  if (isDrawIO && effectiveNoteId) {
     console.log("[ContextManager] ✅ 检测到 DrawIO 笔记,使用专用上下文构建");
 
     // 使用传入的当前用户消息，或从对话历史中获取
@@ -278,7 +298,7 @@ export async function buildMessagesForAI(
 
     console.log("[ContextManager] 使用的用户消息:", userMessage);
 
-    const result = await buildDrawIOContext(conversation.noteId);
+    const result = await buildDrawIOContext(effectiveNoteId);
 
     if (result.hasContext && result.contextPrompt) {
       // 构建包含 DrawIO 上下文的消息
@@ -300,6 +320,93 @@ export async function buildMessagesForAI(
       });
 
       return messages;
+    }
+  }
+
+  if (isMonaco && effectiveNoteId) {
+    console.log("[ContextManager] ✅ 检测到 Monaco 笔记,使用专用上下文构建");
+
+    // 使用传入的当前用户消息，或从对话历史中获取
+    const userMessage =
+      config.currentUserMessage ||
+      (() => {
+        const lastMessage =
+          conversation.messages[conversation.messages.length - 1];
+        return lastMessage?.role === "user" ? lastMessage.content : "";
+      })();
+
+    console.log("[ContextManager] 使用的用户消息:", userMessage);
+
+    const result = await buildMonacoContext(effectiveNoteId);
+
+    if (result.hasContext && result.contextPrompt) {
+      // 构建包含 Monaco 上下文的消息
+      const messages: ChatMessage[] = [
+        {
+          role: "system",
+          content: `${systemPrompt}\n\n${result.contextPrompt}`,
+        },
+        ...conversation.messages.slice(-6), // 只保留最近6条历史消息
+        {
+          role: "user",
+          content: userMessage,
+        },
+      ];
+
+      console.log("[ContextManager] Monaco 上下文构建完成:", {
+        hasContext: true,
+        messagesCount: messages.length,
+      });
+
+      return messages;
+    }
+  }
+
+  if (isText && effectiveNoteId) {
+    console.log(
+      "[ContextManager] ✅ 检测到文本笔记(Markdown/富文本),使用通用文本上下文构建",
+    );
+
+    // 使用传入的当前用户消息，或从对话历史中获取
+    const userMessage =
+      config.currentUserMessage ||
+      (() => {
+        const lastMessage =
+          conversation.messages[conversation.messages.length - 1];
+        return lastMessage?.role === "user" ? lastMessage.content : "";
+      })();
+
+    console.log("[ContextManager] 使用的用户消息:", userMessage);
+
+    // 获取笔记的文件类型
+    const fileType = await getNoteFileType(effectiveNoteId);
+    if (!fileType) {
+      console.warn("[ContextManager] ⚠️ 无法获取文件类型,使用默认处理");
+    } else {
+      const result = await buildTextContext(effectiveNoteId, fileType);
+
+      if (result.hasContext && result.contextPrompt) {
+        // 构建包含文本内容上下文的消息
+        const messages: ChatMessage[] = [
+          {
+            role: "system",
+            content: `${systemPrompt}\n\n${result.contextPrompt}`,
+          },
+          ...conversation.messages.slice(-6), // 只保留最近6条历史消息
+          {
+            role: "user",
+            content: userMessage,
+          },
+        ];
+
+        console.log("[ContextManager] 文本上下文构建完成:", {
+          fileType,
+          hasContext: true,
+          messagesCount: messages.length,
+        });
+
+        return messages;
+      }
     }
   }
 

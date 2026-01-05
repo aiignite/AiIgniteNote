@@ -4,6 +4,7 @@ import { db } from "../db";
 import { aiApi } from "../lib/api/ai";
 import { buildMessagesForAI, getTokenUsage } from "../lib/api/contextManager";
 import { useModelStore } from "./modelStore";
+import { useAuthStore } from "./authStore";
 import {
   SelectedContent,
   SelectionHelper,
@@ -49,11 +50,13 @@ export interface AIAssistant {
   maxTokens?: number;
   isPublic?: boolean;
   isActive?: boolean;
+  userId?: string;
 }
 
 interface AIStore {
   conversations: AIConversation[];
   currentConversation: AIConversation | null;
+  currentNoteId: string | null; // 当前正在编辑的笔记 ID
   isLoading: boolean;
   isStreaming: boolean;
   currentResponse: string;
@@ -83,6 +86,7 @@ interface AIStore {
     signal?: AbortSignal,
   ) => Promise<void>;
   setCurrentAssistant: (assistant: AIAssistant) => void;
+  setCurrentNoteId: (noteId: string | null) => void; // 设置当前编辑的笔记 ID
   loadAssistants: () => Promise<void>;
   createAssistant: (assistant: Omit<AIAssistant, "id">) => Promise<AIAssistant>;
   updateAssistant: (id: string, updates: Partial<AIAssistant>) => Promise<void>;
@@ -118,6 +122,7 @@ interface AIStore {
 export const useAIStore = create<AIStore>((set, get) => ({
   conversations: [],
   currentConversation: null,
+  currentNoteId: null, // 初始化为 null
   isLoading: false,
   isStreaming: false,
   currentResponse: "",
@@ -225,6 +230,7 @@ export const useAIStore = create<AIStore>((set, get) => ({
         maxTokens: a.maxTokens,
         isPublic: a.isPublic,
         isActive: a.isActive ?? true,
+        userId: a.userId,
       }));
 
       set({ assistants });
@@ -246,6 +252,7 @@ export const useAIStore = create<AIStore>((set, get) => ({
           maxTokens: a.maxTokens,
           isPublic: a.isPublic,
           isActive: a.isActive,
+          userId: a.userId,
         }));
         set({ assistants });
         console.log(`[AIStore] 从缓存加载了 ${assistants.length} 个助手`);
@@ -370,19 +377,27 @@ export const useAIStore = create<AIStore>((set, get) => ({
 
     console.log(`[AIStore] 已更新助手（本地）: ${id}`);
 
-    // 3. 后台尝试同步到 PostgreSQL
-    try {
-      await aiApi.updateAssistant(id, updates);
+    // 3. 后台尝试同步到 PostgreSQL（仅限自己创建的助手）
+    // 只有当助手是自己创建的（userId 匹配或没有 userId 表示本地创建）时才同步
+    const { user } = useAuthStore.getState();
+    const isOwnAssistant = !existing.userId || existing.userId === user?.id;
 
-      // 4. 同步成功，清除标记
-      await db.aiAssistants.update(id, {
-        _pendingSync: undefined,
-      });
+    if (isOwnAssistant) {
+      try {
+        await aiApi.updateAssistant(id, updates);
 
-      console.log(`[AIStore] 已同步更新到服务器: ${id}`);
-    } catch (error) {
-      console.error(`[AIStore] 更新同步失败，保留待同步标记: ${id}`, error);
-      // 同步失败，保留 _pendingSync 标记，下次再试
+        // 4. 同步成功，清除标记
+        await db.aiAssistants.update(id, {
+          _pendingSync: undefined,
+        });
+
+        console.log(`[AIStore] 已同步更新到服务器: ${id}`);
+      } catch (error) {
+        console.error(`[AIStore] 更新同步失败，保留待同步标记: ${id}`, error);
+        // 同步失败，保留 _pendingSync 标记，下次再试
+      }
+    } else {
+      console.log(`[AIStore] 跳过同步其他用户的公共助手: ${id}`);
     }
   },
 
@@ -548,53 +563,68 @@ export const useAIStore = create<AIStore>((set, get) => ({
       throw new Error("对话不存在");
     }
 
-    // 检查对话是否有关联的笔记
-    // 如果没有 noteId，说明是旧对话，尝试从当前 URL 获取 noteId 并重新创建对话
-    if (!conversation.noteId) {
-      const currentPath = window.location.pathname;
-      const noteIdFromUrl = currentPath.startsWith("/notes/")
-        ? currentPath.split("/")[2]
-        : undefined;
+    // 🔥 优先级：currentNoteId > URL > conversation.noteId
+    const { currentNoteId } = get();
 
-      if (noteIdFromUrl) {
-        console.log(
-          "[AIStore] 检测到旧对话没有 noteId，自动创建新对话关联到当前笔记",
-        );
-        console.log("[AIStore] 从 URL 提取的 noteId:", noteIdFromUrl);
+    // 从 URL 获取 noteId
+    const currentPath = window.location.pathname;
+    const noteIdFromUrl = currentPath.startsWith("/notes/")
+      ? currentPath.split("/")[2]
+      : undefined;
 
-        // 创建新对话
-        const newConversation = await get().createConversation(noteIdFromUrl);
+    // 使用第一个可用的 noteId
+    const effectiveNoteId =
+      currentNoteId || noteIdFromUrl || conversation.noteId;
 
-        // 使用新对话发送消息
-        return get().sendMessage(newConversation.id, content, signal);
-      }
+    console.log("[AIStore] 📍 当前路径:", currentPath);
+    console.log("[AIStore] 📍 Store中的 currentNoteId:", currentNoteId);
+    console.log("[AIStore] 📍 从 URL 提取的 noteId:", noteIdFromUrl);
+    console.log("[AIStore] 📍 对话关联的 noteId:", conversation.noteId);
+    console.log("[AIStore] ✅ 最终使用的 noteId:", effectiveNoteId);
+
+    if (!effectiveNoteId) {
+      console.warn("[AIStore] ⚠️ 无法获取 noteId，将不注入文件内容");
     }
 
     // 检查是否是思维导图笔记
     const isMindMap =
-      conversation.noteId &&
+      effectiveNoteId &&
       (await db.notes
-        .get(conversation.noteId)
-        .then((note) => note?.fileType === "mindmap")
+        .get(effectiveNoteId)
+        .then((note) => {
+          console.log("[AIStore] 📝 检测笔记类型:", note?.fileType);
+          return note?.fileType === "mindmap";
+        })
         .catch(() => false));
 
     // 检查是否是 DrawIO 笔记
     const isDrawIO =
-      conversation.noteId &&
+      effectiveNoteId &&
       (await db.notes
-        .get(conversation.noteId)
+        .get(effectiveNoteId)
         .then((note) => note?.fileType === "drawio")
         .catch(() => false));
+
+    console.log(
+      "[AIStore] 🔍 检测结果 - isMindMap:",
+      isMindMap,
+      "isDrawIO:",
+      isDrawIO,
+    );
 
     // 获取当前助手的系统提示词
     const currentAssistant = get().currentAssistant;
 
     // 使用上下文管理服务构建消息
     // 对于思维导图或 DrawIO 笔记，传入当前用户消息以注入图表上下文
+    // 🔥 传入 effectiveNoteId 以确保文件内容被正确注入
     const messages = await buildMessagesForAI(
       conversation,
       currentAssistant.systemPrompt,
-      isMindMap || isDrawIO ? { currentUserMessage: content } : {},
+      {
+        currentUserMessage: content,
+        noteId: effectiveNoteId, // 🔥 传递笔记 ID
+      },
       signal,
     );
 
@@ -655,6 +685,18 @@ export const useAIStore = create<AIStore>((set, get) => ({
       if (config && config.enabled) {
         modelId = config.id;
         console.log(`[模型选择] 使用助手配置的模型: ${config.name}`);
+      } else {
+        // 助手配置的模型不可用（可能是公开助手使用了创建者的私有模型）
+        console.log(
+          `[模型选择] ⚠️ 助手配置的模型 ${currentAssistant.model} 不可用或不存在`,
+        );
+        if (config && !config.enabled) {
+          console.log(`[模型选择] 原因: 模型 ${config.name} 已被禁用`);
+        } else if (!config) {
+          console.log(
+            `[模型选择] 原因: 模型配置不存在（可能是公开助手使用了其他用户的私有模型）`,
+          );
+        }
       }
     }
 
@@ -758,6 +800,11 @@ export const useAIStore = create<AIStore>((set, get) => ({
     set({ currentAssistant: assistant });
     // 保存到 localStorage
     localStorage.setItem("selectedAssistant", assistant.id);
+  },
+
+  setCurrentNoteId: (noteId) => {
+    console.log("[AIStore] 🔧 设置当前笔记 ID:", noteId);
+    set({ currentNoteId: noteId });
   },
 
   getAllAssistants: () => {

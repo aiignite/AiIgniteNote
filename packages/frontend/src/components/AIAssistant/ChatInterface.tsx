@@ -19,6 +19,7 @@ import { useAIStore } from "../../store/aiStore";
 import { AIConversation } from "../../types";
 import styled, { keyframes, css } from "styled-components";
 import MarkdownRenderer from "./MarkdownRenderer";
+import AssistantEditModal, { AIAssistant } from "./AssistantEditModal";
 import {
   COLORS,
   TYPOGRAPHY,
@@ -433,6 +434,7 @@ const StyledTextArea = styled(TextArea)`
   font-size: ${TYPOGRAPHY.fontSize.sm};
   line-height: ${TYPOGRAPHY.lineHeight.normal};
   color: ${COLORS.ink};
+  overflow-y: auto;
 
   &::placeholder {
     color: ${COLORS.inkMuted};
@@ -675,10 +677,14 @@ function AssistantSelect({ noteId }: { noteId?: string }) {
     clearConversations,
   } = useAIStore();
   const [menuVisible, setMenuVisible] = useState(false);
+  const [editModalVisible, setEditModalVisible] = useState(false);
+  const [editingAssistant, setEditingAssistant] = useState<AIAssistant | null>(
+    null,
+  );
 
   useEffect(() => {
     loadConversations();
-  }, []);
+  }, [loadConversations]);
 
   const handleChange = (value: unknown) => {
     const assistantId = value as string;
@@ -689,7 +695,7 @@ function AssistantSelect({ noteId }: { noteId?: string }) {
   };
 
   const handleNewChat = async () => {
-    await createConversation(noteId);
+    await createConversation(effectiveNoteId);
     setMenuVisible(false);
   };
 
@@ -703,12 +709,21 @@ function AssistantSelect({ noteId }: { noteId?: string }) {
     setMenuVisible(false);
   };
 
-  // 查看助手详情（打开编辑）
+  // 查看助手详情（打开编辑弹窗）
   const handleViewDetail = (e: React.MouseEvent, assistantId: string) => {
     e.stopPropagation();
-    // 导航到设置页面的 AI 助手标签，并指定要编辑的助手
-    navigate(`/settings?tab=ai-assistants&edit=${assistantId}`);
+    const assistant = assistants.find((a) => a.id === assistantId);
+    if (assistant) {
+      setEditingAssistant(assistant);
+      setEditModalVisible(true);
+    }
     setMenuVisible(false);
+  };
+
+  // 保存助手后重新加载
+  const handleSaveAssistant = async () => {
+    setEditModalVisible(false);
+    setEditingAssistant(null);
   };
 
   // 获取最近的对话（最多10条）
@@ -842,6 +857,17 @@ function AssistantSelect({ noteId }: { noteId?: string }) {
           </ActionItem>
         </HistoryPanel>
       </SelectorRight>
+
+      {/* 助手编辑弹窗 - 使用可复用组件 */}
+      <AssistantEditModal
+        visible={editModalVisible}
+        assistant={editingAssistant}
+        onCancel={() => {
+          setEditModalVisible(false);
+          setEditingAssistant(null);
+        }}
+        onSave={handleSaveAssistant}
+      />
     </AssistantSelector>
   );
 }
@@ -872,16 +898,54 @@ function ChatInterface({ noteId }: ChatInterfaceProps) {
     setSelectedText,
     clearSelectedContent,
     currentAssistant,
+    currentNoteId, // 🔥 从 AI Store 读取 currentNoteId
   } = useAIStore();
   const [inputValue, setInputValue] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [abortController, setAbortController] =
     useState<AbortController | null>(null);
 
+  // 🔥 优先使用 AI Store 的 currentNoteId，其次使用传入的 noteId（从 URL）
+  const effectiveNoteId = currentNoteId || noteId;
+
+  // 添加日志：监听 noteId 的变化
+  useEffect(() => {
+    console.log("[ChatInterface] noteId from props:", noteId);
+    console.log("[ChatInterface] currentNoteId from store:", currentNoteId);
+    console.log("[ChatInterface] effectiveNoteId:", effectiveNoteId);
+  }, [noteId, currentNoteId, effectiveNoteId]);
+
   // 自动滚动到底部
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [currentConversation?.messages, currentResponse]);
+
+  // 当有选中内容时，自动添加到输入框
+  useEffect(() => {
+    if (selectedContent && selectedContent.text) {
+      // 检查是否不是空选择
+      const isEmptySelection =
+        !selectedContent.text ||
+        selectedContent.text.trim() === "" ||
+        selectedContent.type === "empty";
+
+      if (!isEmptySelection) {
+        // 构建提示文本
+        let prefix = "";
+        if (selectedContent.type === "mindmap_nodes") {
+          prefix = "[思维导图选中内容]\n";
+        } else if (selectedContent.type === "drawio_elements") {
+          prefix = "[DrawIO选中内容]\n";
+        }
+
+        // 将选中内容添加到输入框
+        setInputValue(prefix + selectedContent.text);
+
+        // 清除选中状态，避免重复添加
+        clearSelectedContent();
+      }
+    }
+  }, [selectedContent, clearSelectedContent]);
 
   // 发送消息
   const handleSend = async () => {
@@ -890,9 +954,31 @@ function ChatInterface({ noteId }: ChatInterfaceProps) {
       return;
     }
 
-    if (!currentConversation) {
-      message.error("请先创建对话");
-      return;
+    // 如果没有当前对话，自动创建一个新对话
+    let conversation = currentConversation;
+    if (!conversation) {
+      console.log(
+        "[ChatInterface] 当前没有对话，自动创建新对话，effectiveNoteId:",
+        effectiveNoteId,
+      );
+      conversation = await createConversation(effectiveNoteId);
+      console.log(
+        "[ChatInterface] 已创建新对话，ID:",
+        conversation.id,
+        "noteId:",
+        conversation.noteId,
+      );
+    }
+
+    // 如果对话没有 noteId 但当前页面有 noteId，更新对话
+    if (!conversation.noteId && effectiveNoteId) {
+      console.log("[ChatInterface] 对话没有 noteId，尝试更新");
+      // 重新创建一个关联了 noteId 的对话
+      conversation = await createConversation(effectiveNoteId);
+      console.log(
+        "[ChatInterface] 已创建新对话并关联 noteId:",
+        effectiveNoteId,
+      );
     }
 
     const messageToSend = inputValue.trim();
@@ -903,11 +989,7 @@ function ChatInterface({ noteId }: ChatInterfaceProps) {
     setAbortController(controller);
 
     try {
-      await sendMessage(
-        currentConversation.id,
-        messageToSend,
-        controller.signal,
-      );
+      await sendMessage(conversation.id, messageToSend, controller.signal);
     } catch (error) {
       if ((error as Error).name !== "AbortError") {
         message.error("发送失败: " + (error as Error).message);
@@ -966,7 +1048,7 @@ function ChatInterface({ noteId }: ChatInterfaceProps) {
           borderBottom: `1px solid ${COLORS.subtle}`,
         }}
       >
-        <AssistantSelect noteId={noteId} />
+        <AssistantSelect noteId={effectiveNoteId} />
       </InputContainer>
 
       {/* 消息列表 */}
@@ -1058,7 +1140,10 @@ function ChatInterface({ noteId }: ChatInterfaceProps) {
                 handleSend();
               }
             }}
-            autoSize={{ minRows: 2, maxRows: 2 }}
+            autoSize={{
+              minRows: 2,
+              maxRows: 10,
+            }}
           />
         </InputWrapper>
         <InputActions>

@@ -75,7 +75,25 @@ export default defineConfig({
       "@ainote/shared": "/packages/shared/src",
     },
   },
+  optimizeDeps: {
+    include: [
+      // 预构建 Monaco 编辑器
+      "monaco-editor",
+      "@monaco-editor/react",
+    ],
+    exclude: ["@monaco-editor/react/lib"], // 排除一些不必要的预构建
+  },
   assetsInclude: ["**/*.html"],
   // 启用 publicDir，这样 public/drawio 文件夹会被 Vite 自动处理
   publicDir: "public",
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          // 将 Monaco Editor 单独打包
+          "monaco-editor": ["monaco-editor"],
+        },
+      },
+    },
+  },
 });

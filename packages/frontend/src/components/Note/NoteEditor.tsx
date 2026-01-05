@@ -272,7 +272,7 @@ function NoteEditor({ noteId }: NoteEditorProps) {
   const { message } = App.useApp();
   const { currentNote, setCurrentNote, updateNote, createNote } =
     useNoteStore();
-  const { setCurrentAssistant, assistants } = useAIStore();
+  const { setCurrentAssistant, assistants, setCurrentNoteId } = useAIStore();
   const { tags: allTags, loadTags } = useTagStore();
 
   // 状态管理
@@ -294,14 +294,44 @@ function NoteEditor({ noteId }: NoteEditorProps) {
   // 编辑器控制状态 - 使用全局全屏状态
   const { isFullscreen, setFullscreen } = useFullscreenStore();
 
-  // 自动切换到思维导图助手
+  // 自动切换到对应的 AI 助手
   useEffect(() => {
+    if (!fileType || !assistants.length) return;
+
+    let targetAssistantId: string | null = null;
+
+    // 根据文件类型选择对应的助手（使用真实的助手 ID）
     if (fileType === NoteFileType.MINDMAP) {
-      // 查找思维导图助手
-      const mindmapAssistant = assistants.find((a) => a.id === "mindmap");
-      if (mindmapAssistant) {
-        setCurrentAssistant(mindmapAssistant);
-        console.log("[NoteEditor] 已自动切换到思维导图助手");
+      // 思维导图 -> 思维导图助手
+      targetAssistantId = "mindmap";
+    } else if (fileType === NoteFileType.MONACO) {
+      // Monaco 代码编辑器 -> 代码助手
+      targetAssistantId = "coding_public";
+    } else if (
+      fileType === NoteFileType.MARKDOWN ||
+      fileType === NoteFileType.RICH_TEXT
+    ) {
+      // Markdown 或富文本 -> 写作助手
+      targetAssistantId = "writing_public";
+    } else if (fileType === NoteFileType.DRAWIO) {
+      // DrawIO -> 思维导图助手（或者可以创建专门的 drawio 助手）
+      targetAssistantId = "mindmap";
+    }
+
+    if (targetAssistantId) {
+      const targetAssistant = assistants.find(
+        (a) => a.id === targetAssistantId,
+      );
+      if (targetAssistant) {
+        setCurrentAssistant(targetAssistant);
+        console.log(
+          `[NoteEditor] 已自动切换到${targetAssistant.name}助手 (ID: ${targetAssistantId})`,
+        );
+      } else {
+        console.warn(
+          `[NoteEditor] 未找到助手 ID: ${targetAssistantId}，可用的助手:`,
+          assistants.map((a) => a.id),
+        );
       }
     }
   }, [fileType, assistants, setCurrentAssistant]);
@@ -320,6 +350,8 @@ function NoteEditor({ noteId }: NoteEditorProps) {
           const note = await db.notes.get(noteId);
           if (note) {
             setCurrentNote(note);
+            // 🔥 设置当前笔记 ID 到 AI Store
+            setCurrentNoteId(noteId);
             setTitle(note.title);
             setContent(note.content || "");
             // 从 noteTags 表加载标签关联
@@ -337,6 +369,8 @@ function NoteEditor({ noteId }: NoteEditorProps) {
         }
       } else {
         setCurrentNote(null);
+        // 🔥 清空当前笔记 ID
+        setCurrentNoteId(null);
         setTitle("");
         setContent("");
         setTagIds([]);
@@ -346,7 +380,7 @@ function NoteEditor({ noteId }: NoteEditorProps) {
       }
     };
     loadNote();
-  }, [noteId, setCurrentNote, loadTags]);
+  }, [noteId, setCurrentNote, loadTags, setCurrentNoteId]);
 
   // 自动保存函数 - 使用 useCallback 避免重复创建
   const handleAutoSave = useCallback(async () => {

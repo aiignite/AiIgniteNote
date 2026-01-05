@@ -1,4 +1,4 @@
-import Editor from "@monaco-editor/react";
+import Editor, { loader } from "@monaco-editor/react";
 import { useState, useRef, useCallback, useEffect } from "react";
 import * as monaco from "monaco-editor";
 import { UndoOutlined, RedoOutlined, SettingOutlined } from "@ant-design/icons";
@@ -7,6 +7,11 @@ import styled from "styled-components";
 import type { EditorProps } from "./BaseEditor";
 import type { editor } from "monaco-editor";
 import { useAIStore } from "../../store/aiStore";
+
+// 在组件外预先初始化 loader，避免重复加载
+loader
+  .init()
+  .catch((error) => console.error("Monaco Editor 初始化失败:", error));
 
 const EditorWrapper = styled.div`
   height: 100%;
@@ -56,6 +61,7 @@ const EditorContainer = styled.div<{ $isFullscreen: boolean }>`
   flex: 1;
   overflow: hidden;
   position: relative;
+  min-height: 400px; // 确保最小高度，避免编辑器无法显示
 
   ${(props) =>
     props.$isFullscreen &&
@@ -408,10 +414,15 @@ function MonacoEditor({
         <Editor
           height="100%"
           language={settings.language}
-          value={content}
+          value={content || ""} // 确保不会因为 undefined 而加载失败
           theme={settings.theme}
           onChange={handleEditorChange}
           onMount={handleEditorDidMount}
+          loading={
+            <div style={{ padding: "20px", textAlign: "center" }}>
+              加载编辑器...
+            </div>
+          }
           options={{
             fontSize: settings.fontSize,
             minimap: { enabled: settings.minimap },
