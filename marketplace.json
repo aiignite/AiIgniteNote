@@ -1,0 +1,14 @@
+{
+  "marketplaces": [
+    {
+      "name": "Claude Code Community Marketplace",
+      "repository": "ivan-magda/claude-code-marketplace",
+      "url": "https://github.com/ivan-magda/claude-code-marketplace"
+    },
+    {
+      "name": "Alexander Op Builders",
+      "repository": "alexanderop/claude-code-builder",
+      "url": "https://github.com/alexanderop/claude-code-builder"
+    }
+  ]
+}

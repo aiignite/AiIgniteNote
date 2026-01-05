@@ -87,43 +87,33 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
           const response = await notesApi.getNotes();
           const remoteNotes = response.data.notes || [];
 
-          // 同步到 IndexedDB
-          for (const note of remoteNotes) {
-            const existing = await db.notes.get(note.id);
-            const localNote = {
-              id: note.id,
-              title: note.title,
-              content: note.content,
-              htmlContent: note.htmlContent,
-              tags: note.tags || [],
-              category: note.categoryId || note.category?.id || "",
-              isDeleted: note.isDeleted || false,
-              isFavorite: note.isFavorite || false,
-              createdAt: new Date(note.createdAt).getTime(),
-              updatedAt: new Date(note.updatedAt).getTime(),
-              version: note.version || 1,
-              fileType: note.fileType || "markdown",
-              metadata: note.metadata,
-            };
+          // 转换为本地格式
+          const localNotes = remoteNotes.map((note) => ({
+            id: note.id,
+            title: note.title,
+            content: note.content,
+            htmlContent: note.htmlContent,
+            tags: note.tags || [],
+            category: note.categoryId || note.category?.id || "",
+            isDeleted: note.isDeleted || false,
+            isFavorite: note.isFavorite || false,
+            createdAt: new Date(note.createdAt).getTime(),
+            updatedAt: new Date(note.updatedAt).getTime(),
+            version: note.version || 1,
+            fileType: note.fileType || "markdown",
+            metadata: note.metadata,
+          }));
 
-            if (existing) {
-              // 只更新远程更新时间更新的笔记
-              if (localNote.updatedAt > existing.updatedAt) {
-                await db.notes.put(localNote);
-              }
-            } else {
-              // 新笔记，添加到本地
+          // 同步到 IndexedDB（后台同步，不影响显示）
+          for (const localNote of localNotes) {
+            const existing = await db.notes.get(localNote.id);
+            if (!existing || localNote.updatedAt > existing.updatedAt) {
               await db.notes.put(localNote);
             }
           }
 
-          // 从 IndexedDB 加载所有笔记
-          const notes = await db.notes
-            .filter((note) => !note.isDeleted)
-            .reverse()
-            .sortBy("updatedAt");
-
-          set({ notes, isLoading: false });
+          // 直接使用后端返回的笔记列表
+          set({ notes: localNotes, isLoading: false });
           return;
         } catch (apiError) {
           console.warn(
@@ -538,7 +528,11 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
 
   getNotesByCategory: async (categoryId) => {
     try {
-      return await db.getNotesByCategory(categoryId);
+      // 从已经过滤权限的 store notes 数组中筛选,而不是直接查询 IndexedDB
+      const { notes } = get();
+      return notes.filter(
+        (note) => note.category === categoryId && !note.isDeleted,
+      );
     } catch (error) {
       console.error("Failed to get notes by category:", error);
       return [];
@@ -556,7 +550,17 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
 
   getNotesByTagId: async (tagId) => {
     try {
-      return await db.getNotesByTagId(tagId);
+      // 先从 IndexedDB 的 noteTags 关联表查询笔记 ID
+      const noteTagRelations = await db.noteTags
+        .where("tagId")
+        .equals(tagId)
+        .toArray();
+
+      const noteIds = new Set(noteTagRelations.map((r) => r.noteId));
+
+      // 从已经过滤权限的 store notes 数组中筛选
+      const { notes } = get();
+      return notes.filter((note) => !note.isDeleted && noteIds.has(note.id));
     } catch (error) {
       console.error("Failed to get notes by tag ID:", error);
       return [];

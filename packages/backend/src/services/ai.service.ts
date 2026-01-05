@@ -77,12 +77,16 @@ export class AIService {
 
   /**
    * 获取模型配置（通过ID）
+   * 可以获取用户自己的模型，或者公开的模型
    */
   async getModelById(modelId: string, userId: string) {
     return await prisma.modelConfig.findFirst({
       where: {
         id: modelId,
-        userId,
+        OR: [
+          { userId }, // 用户自己的模型
+          { isPublic: true }, // 公开的模型
+        ],
       },
     });
   }

@@ -190,6 +190,12 @@ function MainLayout() {
     ? location.pathname.split("/")[2]
     : undefined;
 
+  // 添加日志：监听 noteId 的变化
+  useEffect(() => {
+    console.log("[MainLayout] 当前路径:", location.pathname);
+    console.log("[MainLayout] 提取的 noteId:", noteId);
+  }, [location.pathname, noteId]);
+
   // 根据路由决定是否显示AI助手（在笔记页面、设置页面、回收站页面都显示）
   const showAIAssistant = ["/notes", "/settings", "/trash"].some((path) =>
     location.pathname.startsWith(path),

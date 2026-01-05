@@ -64,12 +64,11 @@ export const useModelStore = create<ModelStore>((set, get) => ({
         }
       }
 
-      // 从 IndexedDB 加载配置
-      const configs = await db.modelConfigs.toArray();
-      set({ configs, isLoading: false });
+      // 直接使用后端返回的配置（已过滤权限）
+      set({ configs: remoteConfigs, isLoading: false });
 
       // 自动加载启用的配置
-      const enabledConfig = configs.find((c) => c.enabled);
+      const enabledConfig = remoteConfigs.find((c: any) => c.enabled);
       if (enabledConfig) {
         set({ currentConfig: enabledConfig });
       }

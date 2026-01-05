@@ -661,25 +661,16 @@ export default function AiAssistants() {
                 borderRadius: 4,
                 fontSize: 13,
                 color: "#d46b08",
+                lineHeight: 1.6,
               }}
             >
-              ⚠️ 您正在编辑公共助手，修改将<b>仅保存在本地浏览器</b>
-              中，不会同步到服务器。刷新页面或更换设备后，修改会恢复为默认设置。
+              ⚠️ <strong>您正在编辑其他用户创建的公共助手</strong>
               <br />
               <br />
-              💡 <b>建议</b>
-              ：如需长期使用自定义配置，请点击"复制"创建一个自定义副本。
-              <Button
-                type="primary"
-                size="small"
-                style={{ marginTop: 8 }}
-                onClick={() => {
-                  handleCopy(editingAssistant);
-                  setModalVisible(false);
-                }}
-              >
-                复制为自定义助手
-              </Button>
+              您的修改将<b>仅保存在本地浏览器</b>中，不会同步到服务器。
+              <br />
+              • 刷新页面或更换设备后，修改会恢复为原始设置
+              <br />• 如需长期使用自定义配置，建议点击"复制"创建自己的副本
             </div>
           )}
         <Form form={form} layout="vertical" onFinish={handleSubmit}>
@@ -774,7 +765,7 @@ export default function AiAssistants() {
               <Form.Item label="最大Token数" name="maxTokens">
                 <InputNumber
                   min={100}
-                  max={8000}
+                  max={200000}
                   step={100}
                   style={{ width: "100%" }}
                   placeholder="2000"

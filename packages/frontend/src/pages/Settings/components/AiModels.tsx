@@ -779,7 +779,7 @@ export default function AiModels() {
               <Form.Item label="最大Token" name="maxTokens">
                 <InputNumber
                   min={100}
-                  max={32000}
+                  max={256000}
                   step={100}
                   style={{ width: "100%" }}
                 />

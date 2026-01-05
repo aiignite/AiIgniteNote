@@ -361,12 +361,13 @@ function NoteList({
     setCurrentNote,
     toggleFavorite,
     getNotesByCategory,
+    getNotesByTagId,
     getFavoriteNotes,
     updateNote,
     deleteNote,
     categories,
   } = useNoteStore();
-  const { tags, getNotesByTagId } = useTagStore();
+  const { tags } = useTagStore();
   const [searchValue, setSearchValue] = useState("");
   const [filteredNotes, setFilteredNotes] = useState<Note[]>(notes);
   const [loading, setLoading] = useState(false);
