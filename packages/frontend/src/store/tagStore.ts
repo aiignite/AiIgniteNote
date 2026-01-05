@@ -85,12 +85,14 @@ export const useTagStore = create<TagStore>((set, get) => ({
           const response = await tagsApi.createTag({
             name: tagData.name,
             color: tagData.color,
+            isPublic: tagData.isPublic ?? false,
           });
 
           const newTag: LocalTag = {
             id: response.id,
             name: response.name,
             color: response.color,
+            isPublic: response.isPublic ?? false,
             createdAt: new Date(response.createdAt).getTime(),
             updatedAt: new Date(response.updatedAt).getTime(),
           };

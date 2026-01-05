@@ -7,6 +7,7 @@ interface UseAutoSaveOptions {
   tags: string[];
   onSave: () => Promise<void>;
   delay?: number;
+  enabled?: boolean;
 }
 
 export function useAutoSave({
@@ -15,20 +16,61 @@ export function useAutoSave({
   content,
   tags,
   onSave,
-  delay = 2000, // 改为 2 秒自动保存
+  delay = 2000,
+  enabled = true,
 }: UseAutoSaveOptions) {
   const [saveStatus, setSaveStatus] = useState("已保存");
   const [lastSaveTime, setLastSaveTime] = useState<number>(Date.now());
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
   // 用于追踪上次的值，检测实际变化
-  const prevValuesRef = useRef({ title, content, tags: JSON.stringify(tags) });
+  const prevValuesRef = useRef<{
+    title: string;
+    content: string;
+    tags: string;
+  } | null>(null);
+
+  // 标记是否已经完成首次初始化
+  const isInitializedRef = useRef(false);
+
+  // 记录上一次的 enabled 状态，初始值设为 false
+  const prevEnabledRef = useRef(false);
 
   // 检测内容变化
   useEffect(() => {
     const currentTitle = title;
     const currentContent = content;
     const currentTags = JSON.stringify(tags);
+
+    // 如果从禁用变为启用，重新初始化 prevValuesRef
+    if (prevEnabledRef.current !== enabled && prevValuesRef.current !== null) {
+      prevValuesRef.current = null;
+      isInitializedRef.current = false;
+    }
+    prevEnabledRef.current = enabled;
+
+    // 如果未启用，不检测变化
+    if (!enabled) {
+      return;
+    }
+
+    // 第一次加载时，不标记为未保存
+    if (prevValuesRef.current === null) {
+      prevValuesRef.current = {
+        title: currentTitle,
+        content: currentContent,
+        tags: currentTags,
+      };
+
+      // 标记已初始化
+      isInitializedRef.current = true;
+      return;
+    }
+
+    // 如果还没有完成首次初始化，不检测变化
+    if (!isInitializedRef.current) {
+      return;
+    }
 
     const prev = prevValuesRef.current;
 
@@ -47,11 +89,11 @@ export function useAutoSave({
       content: currentContent,
       tags: currentTags,
     };
-  }, [title, content, tags]);
+  }, [title, content, tags, enabled]);
 
   // 自动保存
   useEffect(() => {
-    if (!noteId || !hasUnsavedChanges) return;
+    if (!noteId || !hasUnsavedChanges || !enabled) return;
 
     const timer = setTimeout(async () => {
       try {
@@ -67,7 +109,7 @@ export function useAutoSave({
     }, delay);
 
     return () => clearTimeout(timer);
-  }, [noteId, hasUnsavedChanges, onSave, delay]);
+  }, [noteId, hasUnsavedChanges, onSave, delay, enabled]);
 
   // 手动保存
   const manualSave = useCallback(async () => {

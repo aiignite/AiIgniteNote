@@ -1,14 +1,18 @@
-import { useEffect, useRef, useState, useCallback } from "react";
-import { Spin, Input, Button, Tooltip, message } from "antd";
-import { SendOutlined } from "@ant-design/icons";
-import styled from "styled-components";
-import type { EditorProps } from "./BaseEditor";
-import { useAIStore } from "../../store/aiStore";
 import {
-  SelectedContent,
-  SelectionHelper,
-  DrawIOElementData,
-} from "../../types/selection";
+  useEffect,
+  useRef,
+  useState,
+  useCallback,
+  forwardRef,
+  useImperativeHandle,
+} from "react";
+import { Spin, Input, Button, Tooltip, Modal, App } from "antd";
+import type { EditorProps } from "./BaseEditor";
+import { SendOutlined, ImportOutlined, CopyOutlined } from "@ant-design/icons";
+import styled from "styled-components";
+import { useAIStore } from "../../store/aiStore";
+import { DrawIOElementData } from "../../types/selection";
+import { extractDrawIONodes } from "../../lib/api/drawioContextBuilder";
 
 const EditorContainer = styled.div`
   height: 100%;
@@ -65,23 +69,35 @@ function getEmptyDrawIOXml(): string {
 </mxGraphModel>`;
 }
 
-function DrawIOEditor({
-  title,
-  content,
-  metadata,
-  onChange,
-  onTitleChange,
-  onSave,
-}: EditorProps) {
+const DrawIOEditor = forwardRef<any, EditorProps>(function DrawIOEditor(
+  {
+    title,
+    content,
+    metadata,
+    onChange,
+    onTitleChange,
+    onSave,
+    onExportImage,
+  }: EditorProps,
+  ref: any,
+) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedElementCount, setSelectedElementCount] = useState(0);
+  const [importModalVisible, setImportModalVisible] = useState(false);
+  const [importXmlText, setImportXmlText] = useState("");
   const currentXmlRef = useRef<string>("");
-  const { setSelectedContent } = useAIStore();
+  const isExportingRef = useRef(false); // 防止并发导出
+  const { message } = App.useApp();
+  const {
+    sendDrawioToAI,
+    importDrawioFromClipboard,
+    setCurrentAssistant,
+    assistants,
+  } = useAIStore();
 
   // 使用本地 DrawIO 编辑器，设置语言为简体中文
-  const DRAWIO_URL =
-    "/drawio/index.html?embed=1&ui=minimal&spin=1&proto=json&lang=zh";
+  const DRAWIO_URL = "/drawio/index.html?embed=1&ui=minimal&proto=json&lang=zh";
 
   // 初始化 DrawIO 数据
   const initialXml = metadata?.drawioData || content || getEmptyDrawIOXml();
@@ -215,96 +231,281 @@ function DrawIOEditor({
   }, [initialXml, title, metadata, onChange, onSave]);
 
   // 发送选中元素到 AI 助手
-  const handleSendToAI = useCallback(() => {
+  const handleSendToAI = useCallback(async () => {
     if (!iframeRef.current) {
       message.warning("DrawIO 编辑器未加载");
       return;
     }
 
-    // 请求 DrawIO 返回选中的元素
-    const requestId = `get_selected_${Date.now()}`;
-    iframeRef.current.contentWindow?.postMessage(
-      JSON.stringify({
-        action: "getSelected",
-        requestId,
-      }),
-      "*",
-    );
+    const currentXml = currentXmlRef.current;
 
-    // 设置一次性监听器来接收响应
-    const handleResponse = (event: MessageEvent) => {
-      const msg = event.data;
-      if (typeof msg === "string") {
-        try {
-          const parsed = JSON.parse(msg);
-          if (parsed.requestId === requestId) {
-            // 处理返回的选中元素
-            const elements = parsed.elements || [];
-            if (elements.length === 0) {
-              message.warning("请先选中元素");
-              return;
-            }
+    // 提取所有节点信息
+    const allNodes = extractDrawIONodes(currentXml);
 
-            // 提取元素数据
-            const elementDataList: DrawIOElementData[] = elements.map(
-              (el: any) => ({
-                id: el.id,
-                label: el.value || el.label || "",
-                type: el.style?.baseTypeName || "未知",
-                style: el.style,
-              }),
-            );
+    // 过滤出选中的节点（这里简化处理，发送所有节点）
+    // DrawIO API 限制较多，我们发送完整数据让 AI 分析
+    try {
+      await sendDrawioToAI(currentXml, allNodes);
+      message.success(`已将图表数据发送到 AI 助手 (${allNodes.length} 个元素)`);
+    } catch (error) {
+      console.error("[DrawIO] 发送到 AI 失败:", error);
+      message.error("发送失败");
+    }
+  }, [sendDrawioToAI, message]);
 
-            // 生成格式化文本
-            const formattedText =
-              SelectionHelper.formatDrawIOElements(elementDataList);
+  // 从 AI 助手导入
+  const handleImportFromAI = useCallback(() => {
+    const result = importDrawioFromClipboard();
 
-            // 构建选择内容
-            const content: SelectedContent = {
-              type: "drawio_elements",
-              source: "drawio",
-              text: formattedText,
-              raw: elementDataList,
-              metadata: {
-                count: elementDataList.length,
-                hasStructure: false,
-                timestamp: Date.now(),
-              },
-            };
+    if (!result.success) {
+      message.error(result.error || "导入失败");
+      return;
+    }
 
-            // 更新 AI Store
-            setSelectedContent(content);
-            message.success(
-              `已将 ${elementDataList.length} 个元素添加到 AI 助手`,
-            );
+    if (!result.data) {
+      message.error("没有可导入的数据");
+      return;
+    }
 
-            // 移除监听器
-            window.removeEventListener("message", handleResponse);
-          }
-        } catch (e) {
-          console.error("[DrawIO] Failed to parse response:", e);
-        }
+    // 更新 DrawIO 图表
+    if (iframeRef.current) {
+      iframeRef.current.contentWindow?.postMessage(
+        JSON.stringify({
+          action: "load",
+          xml: result.data,
+          autosave: true,
+        }),
+        "*",
+      );
+
+      // 保存到笔记
+      onChange(result.data, {
+        ...metadata,
+        drawioData: result.data,
+      });
+
+      message.success("已从 AI 助手导入 DrawIO 图表");
+    }
+  }, [importDrawioFromClipboard, onChange, metadata]);
+
+  // 从剪贴板导入
+  const handleImportFromClipboard = async () => {
+    try {
+      const clipboardText = await navigator.clipboard.readText();
+
+      if (!clipboardText.trim()) {
+        message.warning("剪贴板为空");
+        return;
       }
-    };
 
-    // 添加临时监听器
-    window.addEventListener("message", handleResponse);
+      // 检查是否包含 DrawIO XML
+      if (!clipboardText.includes("<mxGraphModel")) {
+        message.error("剪贴板内容不是有效的 DrawIO XML");
+        return;
+      }
 
-    // 10 秒后自动移除监听器
-    setTimeout(() => {
-      window.removeEventListener("message", handleResponse);
-    }, 10000);
-  }, [setSelectedContent, message]);
+      // 提取 XML
+      const xmlMatch = clipboardText.match(
+        /<mxGraphModel[\s\S]*?<\/mxGraphModel>/,
+      );
+      if (!xmlMatch) {
+        message.error("无法提取 DrawIO XML");
+        return;
+      }
 
-  // 导出 XML
+      const newXml = xmlMatch[0];
+
+      // 更新 DrawIO 图表
+      if (iframeRef.current) {
+        iframeRef.current.contentWindow?.postMessage(
+          JSON.stringify({
+            action: "load",
+            xml: newXml,
+            autosave: true,
+          }),
+          "*",
+        );
+
+        // 保存到笔记
+        onChange(newXml, {
+          ...metadata,
+          drawioData: newXml,
+        });
+
+        message.success("已从剪贴板导入 DrawIO 图表");
+      }
+    } catch (error) {
+      console.error("[DrawIO] 从剪贴板导入失败:", error);
+      if (error instanceof Error && error.name === "NotAllowedError") {
+        message.error("无法访问剪贴板，请授予权限");
+      } else {
+        message.error("导入失败");
+      }
+    }
+  };
+
+  // 手动输入 XML 导入
+  const handleManualImport = () => {
+    if (!importXmlText.trim()) {
+      message.warning("请输入 DrawIO XML");
+      return;
+    }
+
+    if (!importXmlText.includes("<mxGraphModel")) {
+      message.error("不是有效的 DrawIO XML");
+      return;
+    }
+
+    // 更新 DrawIO 图表
+    if (iframeRef.current) {
+      iframeRef.current.contentWindow?.postMessage(
+        JSON.stringify({
+          action: "load",
+          xml: importXmlText,
+          autosave: true,
+        }),
+        "*",
+      );
+
+      // 保存到笔记
+      onChange(importXmlText, {
+        ...metadata,
+        drawioData: importXmlText,
+      });
+
+      setImportModalVisible(false);
+      setImportXmlText("");
+      message.success("导入成功");
+    }
+  };
+
+  // 导出 XML（文本）
   const exportXml = useCallback(() => {
     return currentXmlRef.current;
   }, []);
 
+  // 导出图片
+  const exportImage = useCallback(() => {
+    console.log("[DrawIO] 导出函数被调用");
+    return new Promise<void>((resolve, reject) => {
+      // 防止并发导出
+      if (isExportingRef.current) {
+        console.warn("[DrawIO] 导出正在进行中，忽略重复请求");
+        reject(new Error("导出正在进行中"));
+        return;
+      }
+
+      try {
+        if (!iframeRef.current) {
+          message.error("编辑器未初始化");
+          reject(new Error("编辑器未初始化"));
+          return;
+        }
+
+        isExportingRef.current = true;
+
+        // 发送消息给 DrawIO iframe 请求导出 PNG，设置白色背景
+        iframeRef.current.contentWindow?.postMessage(
+          JSON.stringify({
+            action: "export",
+            format: "png",
+            bg: "#ffffff", // 设置白色背景
+          }),
+          "*",
+        );
+
+        message.info("正在生成图片，请稍候...");
+
+        // 监听一次性的导出响应
+        const handleExportResponse = (event: MessageEvent) => {
+          const origin = event.origin;
+          if (
+            origin !== window.location.origin &&
+            origin !== "https://embed.diagrams.net" &&
+            origin !== "https://app.diagrams.net"
+          ) {
+            return;
+          }
+
+          let responseMsg: any = event.data;
+          if (typeof responseMsg === "string") {
+            try {
+              responseMsg = JSON.parse(responseMsg);
+            } catch {
+              return;
+            }
+          }
+
+          // 处理导出响应
+          if (
+            responseMsg &&
+            responseMsg.event === "export" &&
+            responseMsg.format === "png" &&
+            responseMsg.data
+          ) {
+            console.log("[DrawIO] 收到导出响应，开始处理");
+            // 移除监听器
+            window.removeEventListener("message", handleExportResponse);
+            isExportingRef.current = false;
+
+            // 处理 base64 数据
+            const base64Data = responseMsg.data.includes(",")
+              ? responseMsg.data.split(",")[1]
+              : responseMsg.data;
+
+            const binaryString = atob(base64Data);
+            const bytes = new Uint8Array(binaryString.length);
+            for (let i = 0; i < binaryString.length; i++) {
+              bytes[i] = binaryString.charCodeAt(i);
+            }
+
+            const blob = new Blob([bytes], { type: "image/png" });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.href = url;
+            link.download = `${title || "DrawIO图表"}.png`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+
+            message.success("已导出为 PNG 图片");
+            resolve();
+          }
+        };
+
+        // 设置超时
+        const timeoutId = setTimeout(() => {
+          window.removeEventListener("message", handleExportResponse);
+          isExportingRef.current = false;
+          reject(new Error("导出超时"));
+        }, 30000);
+
+        // 添加临时监听器
+        window.addEventListener("message", handleExportResponse);
+      } catch (error: any) {
+        isExportingRef.current = false;
+        console.error("导出图片失败:", error);
+        message.error("导出图片失败: " + error.message);
+        reject(error);
+      }
+    });
+  }, [title, message]);
+
   // 暴露方法供外部调用
+  useImperativeHandle(ref, () => ({
+    exportXml,
+    exportImage,
+  }));
+
+  // 自动切换到 DrawIO 助手
   useEffect(() => {
-    (iframeRef.current as any)?.__exposeApi?.({ exportXml });
-  }, [exportXml]);
+    const drawioAssistant = assistants.find((a) => a.id === "drawio");
+    if (drawioAssistant) {
+      setCurrentAssistant(drawioAssistant);
+      console.log("[DrawIOEditor] 已切换到 DrawIO 绘图助手");
+    }
+  }, [assistants, setCurrentAssistant]);
 
   return (
     <EditorContainer>
@@ -318,20 +519,39 @@ function DrawIOEditor({
 
       {/* 工具栏 */}
       <Toolbar>
+        {/* 发送到 AI 助手 */}
         <Tooltip
-          title={`发送选中元素到 AI 助手 ${selectedElementCount > 0 ? `(${selectedElementCount} 个元素)` : ""}`}
+          title={`发送图表数据到 AI 助手 ${selectedElementCount > 0 ? `(${selectedElementCount} 个元素)` : ""}`}
         >
           <Button
-            type={selectedElementCount > 0 ? "primary" : "default"}
+            type="primary"
             icon={<SendOutlined />}
             onClick={handleSendToAI}
             size="small"
-            disabled={selectedElementCount === 0 || isLoading}
-          >
-            {selectedElementCount > 0
-              ? `发送 ${selectedElementCount} 个元素`
-              : "发送到 AI 助手"}
-          </Button>
+            disabled={isLoading}
+          />
+        </Tooltip>
+
+        {/* 从 AI 导入 */}
+        <Tooltip title="从 AI 助手导入">
+          <Button
+            type="primary"
+            icon={<ImportOutlined />}
+            onClick={handleImportFromAI}
+            size="small"
+            disabled={isLoading}
+          />
+        </Tooltip>
+
+        {/* 从剪贴板导入 */}
+        <Tooltip title="从系统剪贴板导入(支持手工复制)">
+          <Button
+            type="primary"
+            icon={<CopyOutlined />}
+            onClick={handleImportFromClipboard}
+            size="small"
+            disabled={isLoading}
+          />
         </Tooltip>
       </Toolbar>
 
@@ -349,8 +569,33 @@ function DrawIOEditor({
           allow="fullscreen"
         />
       </div>
+
+      {/* 手动导入弹窗 */}
+      <Modal
+        title="导入 DrawIO XML"
+        open={importModalVisible}
+        onCancel={() => setImportModalVisible(false)}
+        onOk={handleManualImport}
+        okText="导入"
+        width={600}
+      >
+        <Input.TextArea
+          placeholder="粘贴 DrawIO XML (从 <mxGraphModel> 到 </mxGraphModel>)"
+          value={importXmlText}
+          onChange={(e) => setImportXmlText(e.target.value)}
+          autoSize={{ minRows: 10, maxRows: 20 }}
+          style={{ fontFamily: "monospace", fontSize: 12 }}
+        />
+        <div
+          style={{ marginTop: 8, fontSize: 12, color: "var(--text-tertiary)" }}
+        >
+          提示：可以从其他 DrawIO 图表中复制 XML，然后在这里粘贴导入
+        </div>
+      </Modal>
     </EditorContainer>
   );
-}
+});
+
+DrawIOEditor.displayName = "DrawIOEditor";
 
 export default DrawIOEditor;

@@ -56,16 +56,18 @@ model Category {
   icon      String?
   color     String?
   sortOrder Int      @default(0) @map("sort_order")
-  userId    String?  @map("user_id")
+  isPublic  Boolean  @default(false) @map("is_public") // 是否公有（其他人可见但不可编辑）
+  userId    String   @map("user_id")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
   // 关系
-  user  User?  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   notes Note[]
 
   @@unique([userId, name])
   @@index([userId])
+  @@index([isPublic])
   @@map("categories")
 }
 
@@ -80,6 +82,7 @@ model Note {
   tags        String[]  @default([]) // 使用 PostgreSQL 的数组类型
   isDeleted   Boolean   @default(false) @map("is_deleted")
   isFavorite  Boolean   @default(false) @map("is_favorite")
+  isPublic    Boolean   @default(false) @map("is_public") // 是否公有（其他人可见但不可编辑）
   version     Int       @default(1)
   userId      String    @map("user_id")
   categoryId  String    @map("category_id")
@@ -99,6 +102,7 @@ model Note {
   @@index([categoryId])
   @@index([isDeleted])
   @@index([userId, isDeleted])
+  @@index([isPublic])
   @@map("notes")
 }
 
@@ -146,7 +150,7 @@ model AiAssistant {
   temperature   Float?
   maxTokens     Int?     @map("max_tokens")
   sortOrder     Int      @default(0) @map("sort_order")
-  isBuiltIn     Boolean  @default(false) @map("is_built_in")
+  isPublic      Boolean  @default(false) @map("is_public") // 是否公有（其他人可见但不可编辑）
   isActive      Boolean  @default(true) @map("is_active")
   userId        String   @map("user_id")
   createdAt     DateTime @default(now()) @map("created_at")
@@ -156,6 +160,7 @@ model AiAssistant {
   conversations AiConversation[]
 
   @@index([userId])
+  @@index([isPublic])
   @@map("ai_assistants")
 }
 
@@ -211,6 +216,7 @@ model ModelConfig {
   topP        Float    @default(0.9) @map("top_p")
   enabled     Boolean  @default(false)
   isDefault   Boolean  @default(false) @map("is_default")
+  isPublic    Boolean  @default(false) @map("is_public") // 是否公有（其他人可见但不可编辑）
   userId      String   @map("user_id")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
@@ -219,6 +225,7 @@ model ModelConfig {
   usageLogs ModelUsageLog[]
 
   @@index([userId])
+  @@index([isPublic])
   @@map("model_configs")
 }
 
@@ -247,6 +254,7 @@ model Tag {
   id        String   @id @default(cuid())
   name      String
   color     String?
+  isPublic  Boolean  @default(false) @map("is_public") // 是否公有（其他人可见但不可编辑）
   userId    String   @map("user_id")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -258,6 +266,7 @@ model Tag {
   @@unique([userId, name])
   @@index([userId])
   @@index([name])
+  @@index([isPublic])
   @@map("tags")
 }
 

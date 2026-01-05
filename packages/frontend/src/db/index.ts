@@ -211,6 +211,123 @@ export class AiNoteDatabase extends Dexie {
           "Database upgraded to version 5: Offline sync support added",
         );
       });
+
+    // 数据库版本 6：添加权限管理支持 (isPublic, userId)
+    this.version(6)
+      .stores({
+        notes:
+          "id, title, category, fileType, isDeleted, isFavorite, isPublic, createdAt, updatedAt, pendingSync",
+        noteVersions: "id, noteId, createdAt",
+        categories: "id, name, isPublic, createdAt, _pendingSync",
+        conversations: "id, noteId, createdAt, updatedAt",
+        modelConfigs: "id, name, enabled, isPublic, _pendingSync",
+        usageLogs: "id, modelId, timestamp",
+        attachments: "id, noteId, name, createdAt",
+        fileAttachments: "id, noteId, fileType, createdAt",
+        aiAssistants: "id, isBuiltIn, isPublic, isActive, sortOrder",
+        tags: "id, name, isPublic, createdAt, _pendingSync",
+        noteTags: "id, noteId, tagId, createdAt",
+      })
+      .upgrade(async (tx) => {
+        // 为现有数据添加 isPublic 字段，默认为 false (私有)
+        console.log(
+          "Database upgraded to version 6: Permission management support added",
+        );
+
+        // 迁移笔记数据
+        const notes = await tx.table<Note>("notes").toArray();
+        for (const note of notes) {
+          if (note.isPublic === undefined) {
+            await tx.table<Note>("notes").update(note.id, {
+              isPublic: false,
+              userId: note.userId || "",
+            });
+          }
+        }
+
+        // 迁移分类数据
+        const categories = await tx.table<Category>("categories").toArray();
+        for (const category of categories) {
+          if (category.isPublic === undefined) {
+            await tx.table<Category>("categories").update(category.id, {
+              isPublic: false,
+              userId: category.userId || "",
+            });
+          }
+        }
+
+        // 迁移标签数据
+        const tags = await tx.table<Tag>("tags").toArray();
+        for (const tag of tags) {
+          if (tag.isPublic === undefined) {
+            await tx.table<Tag>("tags").update(tag.id, {
+              isPublic: false,
+              userId: tag.userId || "",
+            });
+          }
+        }
+
+        // 迁移 AI 助手数据
+        const assistants = await tx
+          .table<LocalAIAssistant>("aiAssistants")
+          .toArray();
+        for (const assistant of assistants) {
+          if (assistant.isPublic === undefined) {
+            await tx
+              .table<LocalAIAssistant>("aiAssistants")
+              .update(assistant.id, {
+                isPublic: false,
+                userId: assistant.userId || "",
+              });
+          }
+        }
+
+        // 迁移模型配置数据
+        const modelConfigs = await tx
+          .table<ModelConfig>("modelConfigs")
+          .toArray();
+        for (const config of modelConfigs) {
+          if (config.isPublic === undefined) {
+            await tx.table<ModelConfig>("modelConfigs").update(config.id, {
+              isPublic: false,
+              userId: config.userId || "",
+            });
+          }
+        }
+      });
+
+    // 数据库版本 7：移除 isBuiltIn 字段，所有助手从数据库加载
+    this.version(7)
+      .stores({
+        notes:
+          "id, title, category, fileType, isDeleted, isFavorite, isPublic, createdAt, updatedAt, pendingSync",
+        noteVersions: "id, noteId, createdAt",
+        categories: "id, name, isPublic, createdAt, _pendingSync",
+        conversations: "id, noteId, createdAt, updatedAt",
+        modelConfigs: "id, name, enabled, isPublic, _pendingSync",
+        usageLogs: "id, modelId, timestamp",
+        attachments: "id, noteId, name, createdAt",
+        fileAttachments: "id, noteId, fileType, createdAt",
+        aiAssistants: "id, isPublic, isActive, sortOrder",
+        tags: "id, name, isPublic, createdAt, _pendingSync",
+        noteTags: "id, noteId, tagId, createdAt",
+      })
+      .upgrade(async (tx) => {
+        console.log(
+          "Database upgraded to version 7: Removed isBuiltIn field, all assistants loaded from database",
+        );
+
+        // 删除所有内置助手数据（它们将从 PostgreSQL 加载）
+        const assistants = await tx
+          .table<LocalAIAssistant>("aiAssistants")
+          .toArray();
+        for (const assistant of assistants) {
+          if ((assistant as any).isBuiltIn === true) {
+            await tx.table<LocalAIAssistant>("aiAssistants").delete(assistant.id);
+            console.log(`[DB] 已删除内置助手: ${assistant.name}`);
+          }
+        }
+      });
   }
 
   // ============================================
@@ -619,135 +736,8 @@ export class AiNoteDatabase extends Dexie {
 
 export const db = new AiNoteDatabase();
 
-// 初始化默认数据
+// 初始化数据库
 export async function initializeDatabase() {
-  try {
-    const categoryCount = await db.categories.count();
-    if (categoryCount === 0) {
-      // 创建默认分类 - 使用单个添加避免批量错误
-      const defaults = [
-        { id: "default", name: "未分类", createdAt: Date.now() },
-        { id: "work", name: "工作", createdAt: Date.now() },
-        { id: "study", name: "学习", createdAt: Date.now() },
-        { id: "life", name: "生活", createdAt: Date.now() },
-        { id: "ideas", name: "灵感", createdAt: Date.now() },
-      ];
-      for (const category of defaults) {
-        try {
-          await db.categories.add(category);
-        } catch {
-          // 忽略已存在的分类
-        }
-      }
-    }
-
-    const configCount = await db.modelConfigs.count();
-    if (configCount === 0) {
-      // 创建默认模型配置（需要用户配置API Key）
-      try {
-        await db.modelConfigs.add({
-          id: `model_${Date.now()}_default`, // 使用唯一 ID 而不是 "default"
-          name: "GLM-4.7",
-          apiKey: "",
-          apiEndpoint: "https://open.bigmodel.cn/api/coding/paas/v4",
-          apiType: "openai",
-          model: "glm-4.7",
-          temperature: 0.7,
-          maxTokens: 2000,
-          topP: 0.9,
-          enabled: true,
-          isDefault: true,
-        });
-      } catch {
-        // 忽略已存在的配置
-      }
-    }
-
-    // 创建默认 AI 助手
-    const assistantCount = await db.aiAssistants.count();
-    if (assistantCount === 0) {
-      const defaultAssistants: LocalAIAssistant[] = [
-        {
-          id: "general",
-          name: "通用助手",
-          description: "处理各种通用问答和任务",
-          systemPrompt:
-            "你是一个有用的AI助手，可以帮助用户完成各种任务。请用简洁、准确的方式回答问题。",
-          avatar: "🤖",
-          model: "",
-          isBuiltIn: true,
-          isActive: true,
-          sortOrder: 1,
-          createdAt: Date.now(),
-          updatedAt: Date.now(),
-        },
-        {
-          id: "translator",
-          name: "翻译专家",
-          description: "专业的多语言翻译助手",
-          systemPrompt:
-            "你是一个专业的翻译助手。当用户提供文本时，请将其翻译成目标语言。如果用户没有指定目标语言，默认翻译成中文。请保持原文的语气和格式。",
-          avatar: "🌐",
-          model: "",
-          isBuiltIn: true,
-          isActive: true,
-          sortOrder: 2,
-          createdAt: Date.now(),
-          updatedAt: Date.now(),
-        },
-        {
-          id: "writer",
-          name: "写作助手",
-          description: "帮助润色和改进文章",
-          systemPrompt:
-            "你是一个专业的写作助手。你可以帮助用户润色文章、改进表达、调整语气。请保持原文的核心意思，同时让表达更加流畅和准确。",
-          avatar: "✍️",
-          model: "",
-          isBuiltIn: true,
-          isActive: true,
-          sortOrder: 3,
-          createdAt: Date.now(),
-          updatedAt: Date.now(),
-        },
-        {
-          id: "coder",
-          name: "编程助手",
-          description: "帮助编写和调试代码",
-          systemPrompt:
-            "你是一个专业的编程助手。你可以帮助用户编写代码、调试程序、解释技术概念。请提供清晰、可运行的代码示例，并附带必要的注释。",
-          avatar: "💻",
-          model: "",
-          isBuiltIn: true,
-          isActive: true,
-          sortOrder: 4,
-          createdAt: Date.now(),
-          updatedAt: Date.now(),
-        },
-        {
-          id: "summarizer",
-          name: "摘要助手",
-          description: "快速总结文档内容",
-          systemPrompt:
-            "你是一个专业的摘要助手。请将用户提供的长文本总结成简洁的要点，保留关键信息和核心观点。",
-          avatar: "📝",
-          model: "",
-          isBuiltIn: true,
-          isActive: true,
-          sortOrder: 5,
-          createdAt: Date.now(),
-          updatedAt: Date.now(),
-        },
-      ];
-
-      for (const assistant of defaultAssistants) {
-        try {
-          await db.aiAssistants.add(assistant);
-        } catch {
-          // 忽略已存在的助手
-        }
-      }
-    }
-  } catch (error) {
-    console.error("Database initialization error:", error);
-  }
+  console.log("[DB] 数据库已准备就绪,等待从后端同步数据");
+  // 本地数据库不再创建默认数据,所有数据从后端同步
 }

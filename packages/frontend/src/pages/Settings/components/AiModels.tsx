@@ -28,6 +28,8 @@ import {
   BarsOutlined,
   AppstoreOutlined,
   InfoCircleOutlined,
+  GlobalOutlined,
+  LockOutlined,
 } from "@ant-design/icons";
 import styled, { keyframes } from "styled-components";
 import {
@@ -660,35 +662,40 @@ export default function AiModels() {
         width={700}
       >
         <Form form={form} layout="vertical" onFinish={handleSubmit}>
-          <Form.Item
-            label="配置名称"
-            name="name"
-            rules={[{ required: true, message: "请输入配置名称" }]}
-          >
-            <Input placeholder="例如: OpenAI GPT-3.5" />
-          </Form.Item>
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item
+                label="配置名称"
+                name="name"
+                rules={[{ required: true, message: "请输入配置名称" }]}
+              >
+                <Input placeholder="例如: OpenAI GPT-3.5" />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item
+                label="API 类型"
+                name="apiType"
+                rules={[{ required: true, message: "请选择API类型" }]}
+              >
+                <Select>
+                  {API_TYPE_OPTIONS.map((option) => (
+                    <Select.Option key={option.value} value={option.value}>
+                      <div>
+                        <div>{option.label}</div>
+                        <div style={{ fontSize: 12, color: "#999" }}>
+                          {option.description}
+                        </div>
+                      </div>
+                    </Select.Option>
+                  ))}
+                </Select>
+              </Form.Item>
+            </Col>
+          </Row>
 
           <Form.Item label="描述" name="description">
             <Input placeholder="简要描述这个配置" />
-          </Form.Item>
-
-          <Form.Item
-            label="API 类型"
-            name="apiType"
-            rules={[{ required: true, message: "请选择API类型" }]}
-          >
-            <Select>
-              {API_TYPE_OPTIONS.map((option) => (
-                <Select.Option key={option.value} value={option.value}>
-                  <div>
-                    <div>{option.label}</div>
-                    <div style={{ fontSize: 12, color: "#999" }}>
-                      {option.description}
-                    </div>
-                  </div>
-                </Select.Option>
-              ))}
-            </Select>
           </Form.Item>
 
           {apiType !== "ollama" && apiType !== "lmstudio" && (
@@ -790,23 +797,42 @@ export default function AiModels() {
             </Col>
           </Row>
 
-          <Form.Item
-            label="是否启用"
-            name="enabled"
-            valuePropName="checked"
-            initialValue={false}
-          >
-            <Switch />
-          </Form.Item>
-
-          <Form.Item
-            label="设为默认"
-            name="isDefault"
-            valuePropName="checked"
-            initialValue={false}
-          >
-            <Switch />
-          </Form.Item>
+          <Row gutter={16}>
+            <Col span={8}>
+              <Form.Item
+                label="是否启用"
+                name="enabled"
+                valuePropName="checked"
+                initialValue={false}
+              >
+                <Switch />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item
+                label="设为默认"
+                name="isDefault"
+                valuePropName="checked"
+                initialValue={false}
+              >
+                <Switch />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item
+                label="可见范围"
+                name="isPublic"
+                valuePropName="checked"
+                initialValue={false}
+                tooltip="公有: 所有人可见但只有你可以修改 | 私有: 只有你可以看到和修改"
+              >
+                <Switch
+                  checkedChildren={<GlobalOutlined />}
+                  unCheckedChildren={<LockOutlined />}
+                />
+              </Form.Item>
+            </Col>
+          </Row>
 
           <Divider />
 

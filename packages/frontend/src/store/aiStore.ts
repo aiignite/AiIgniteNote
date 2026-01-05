@@ -17,6 +17,22 @@ import {
   validateMindMapJSON,
   type MindMapClipboardData,
 } from "../prompts/mindmap-prompts";
+import {
+  DRAWIO_ASSISTANT_CONFIG,
+  extractDrawIOXMLFromResponse,
+  validateDrawIOXML,
+  formatDrawIOForAI,
+  type DrawIOClipboardData,
+} from "../prompts/drawio-prompts";
+import {
+  isDrawIONote,
+  buildDrawIOContext,
+  extractDrawIONodes,
+} from "../lib/api/drawioContextBuilder";
+import {
+  isMindMapNote,
+  buildMindMapContext,
+} from "../lib/api/mindmapContextBuilder";
 
 // ============================================
 // AI 助手类型定义
@@ -31,70 +47,9 @@ export interface AIAssistant {
   model: string;
   temperature?: number;
   maxTokens?: number;
-  isBuiltIn?: boolean;
+  isPublic?: boolean;
   isActive?: boolean;
 }
-
-// 内置助手定义
-// 注意：model 字段为空字符串表示使用用户配置的默认模型
-export const BUILT_IN_ASSISTANTS: AIAssistant[] = [
-  {
-    id: "general",
-    name: "通用助手",
-    description: "处理各种通用问答和任务",
-    avatar: "🤖",
-    model: "", // 使用用户配置的默认模型
-    isBuiltIn: true,
-    isActive: true,
-    systemPrompt:
-      "你是一个有用的AI助手，可以帮助用户完成各种任务。请用简洁、准确的方式回答问题。",
-  },
-  {
-    id: "translator",
-    name: "翻译专家",
-    description: "专业的多语言翻译助手",
-    avatar: "🌐",
-    model: "", // 使用用户配置的默认模型
-    isBuiltIn: true,
-    isActive: true,
-    systemPrompt:
-      "你是一个专业的翻译助手。当用户提供文本时，请将其翻译成目标语言。如果用户没有指定目标语言，默认翻译成中文。请保持原文的语气和格式。",
-  },
-  {
-    id: "writer",
-    name: "写作助手",
-    description: "帮助润色和改进文章",
-    avatar: "✍️",
-    model: "", // 使用用户配置的默认模型
-    isBuiltIn: true,
-    isActive: true,
-    systemPrompt:
-      "你是一个专业的写作助手。你可以帮助用户润色文章、改进表达、调整语气。请保持原文的核心意思，同时让表达更加流畅和准确。",
-  },
-  {
-    id: "coder",
-    name: "编程助手",
-    description: "帮助编写和调试代码",
-    avatar: "💻",
-    model: "", // 使用用户配置的默认模型
-    isBuiltIn: true,
-    isActive: true,
-    systemPrompt:
-      "你是一个专业的编程助手。你可以帮助用户编写代码、调试程序、解释技术概念。请提供清晰、可运行的代码示例，并附带必要的注释。",
-  },
-  {
-    id: "summarizer",
-    name: "摘要助手",
-    description: "快速总结文档内容",
-    avatar: "📝",
-    model: "", // 使用用户配置的默认模型
-    isBuiltIn: true,
-    isActive: true,
-    systemPrompt:
-      "你是一个专业的摘要助手。请将用户提供的长文本总结成简洁的要点，保留关键信息和核心观点。",
-  },
-  MINDMAP_ASSISTANT_CONFIG,
-];
 
 interface AIStore {
   conversations: AIConversation[];
@@ -147,6 +102,17 @@ interface AIStore {
     data?: any;
     error?: string;
   };
+  // DrawIO 剪贴板操作
+  drawioClipboard: DrawIOClipboardData | null;
+  setDrawioClipboard: (data: DrawIOClipboardData) => void;
+  clearDrawioClipboard: () => void;
+  getDrawioClipboard: () => DrawIOClipboardData | null;
+  sendDrawioToAI: (fullXML: string, selectedElements?: any[]) => Promise<void>;
+  importDrawioFromClipboard: () => {
+    success: boolean;
+    data?: string;
+    error?: string;
+  };
 }
 
 export const useAIStore = create<AIStore>((set, get) => ({
@@ -157,9 +123,17 @@ export const useAIStore = create<AIStore>((set, get) => ({
   currentResponse: "",
   selectedText: "",
   selectedContent: EMPTY_SELECTION,
-  currentAssistant: BUILT_IN_ASSISTANTS[0], // 默认使用通用助手
+  currentAssistant: {
+    id: "",
+    name: "",
+    description: "",
+    systemPrompt: "",
+    model: "",
+    isActive: true,
+  }, // 初始为空，等待从数据库加载
   assistants: [],
   mindmapClipboard: null,
+  drawioClipboard: null,
 
   loadConversations: async (noteId) => {
     set({ isLoading: true });
@@ -174,15 +148,18 @@ export const useAIStore = create<AIStore>((set, get) => ({
 
   loadAssistants: async () => {
     try {
-      // 先从后端 API 获取最新的助手配置
+      // 从 PostgreSQL 获取所有助手（用户自己的 + 公有的）
       const response = await aiApi.getAssistants();
       const remoteAssistants = response.data || [];
 
-      // 同步到 IndexedDB
+      console.log(`[AIStore] 从服务器加载了 ${remoteAssistants.length} 个助手`);
+
+      // 同步到 IndexedDB（作为本地缓存）
       for (const assistant of remoteAssistants) {
         const existing = await db.aiAssistants.get(assistant.id);
+
         if (!existing) {
-          // 创建新助手到本地
+          // 新助手，添加到 IndexedDB
           await db.aiAssistants.add({
             id: assistant.id,
             name: assistant.name,
@@ -193,8 +170,9 @@ export const useAIStore = create<AIStore>((set, get) => ({
             temperature: assistant.temperature,
             maxTokens: assistant.maxTokens,
             isActive: assistant.isActive ?? true,
-            isBuiltIn: assistant.isBuiltIn ?? false,
+            isPublic: assistant.isPublic ?? false,
             sortOrder: assistant.sortOrder,
+            userId: assistant.userId,
             createdAt: assistant.createdAt
               ? new Date(assistant.createdAt).getTime()
               : Date.now(),
@@ -203,37 +181,58 @@ export const useAIStore = create<AIStore>((set, get) => ({
               : Date.now(),
           });
         } else {
-          // 更新现有助手（保留本地可能的修改）
-          await db.aiAssistants.update(assistant.id, {
-            name: assistant.name,
-            description: assistant.description,
-            systemPrompt: assistant.systemPrompt,
-            avatar: assistant.avatar,
-            model: assistant.model,
-            isActive: assistant.isActive,
-            updatedAt: Date.now(),
-          });
+          // 已存在，更新数据（如果服务器数据更新）
+          const remoteUpdatedAt = assistant.updatedAt
+            ? new Date(assistant.updatedAt).getTime()
+            : 0;
+
+          if (remoteUpdatedAt > existing.updatedAt) {
+            await db.aiAssistants.update(assistant.id, {
+              name: assistant.name,
+              description: assistant.description,
+              systemPrompt: assistant.systemPrompt,
+              avatar: assistant.avatar,
+              model: assistant.model,
+              isActive: assistant.isActive,
+              isPublic: assistant.isPublic,
+              updatedAt: remoteUpdatedAt,
+            });
+          }
         }
       }
 
-      // 从 IndexedDB 加载助手
-      const dbAssistants = await db.getAssistants();
-      const assistants: AIAssistant[] = dbAssistants.map((a) => ({
+      // 清理 IndexedDB 中服务器已删除的助手
+      const allLocalAssistants = await db.aiAssistants.toArray();
+      const remoteIds = new Set(remoteAssistants.map((a) => a.id));
+
+      for (const localAssistant of allLocalAssistants) {
+        if (!remoteIds.has(localAssistant.id) && !localAssistant._pendingSync) {
+          // 本地有但服务器没有，且不是待同步的新数据，删除
+          await db.aiAssistants.delete(localAssistant.id);
+          console.log(`[AIStore] 清理已删除的助手: ${localAssistant.name}`);
+        }
+      }
+
+      // 转换为前端格式
+      const assistants: AIAssistant[] = remoteAssistants.map((a) => ({
         id: a.id,
         name: a.name,
-        description: a.description,
+        description: a.description || "",
         systemPrompt: a.systemPrompt,
         avatar: a.avatar,
         model: a.model,
         temperature: a.temperature,
         maxTokens: a.maxTokens,
-        isBuiltIn: a.isBuiltIn,
-        isActive: a.isActive,
+        isPublic: a.isPublic,
+        isActive: a.isActive ?? true,
       }));
+
       set({ assistants });
+      console.log(`[AIStore] 已加载 ${assistants.length} 个助手`);
     } catch (error) {
       console.error("Failed to load assistants:", error);
-      // 如果 API 调用失败，回退到只从 IndexedDB 加载
+
+      // API 调用失败，尝试从 IndexedDB 加载缓存
       try {
         const dbAssistants = await db.getAssistants();
         const assistants: AIAssistant[] = dbAssistants.map((a) => ({
@@ -245,186 +244,172 @@ export const useAIStore = create<AIStore>((set, get) => ({
           model: a.model,
           temperature: a.temperature,
           maxTokens: a.maxTokens,
-          isBuiltIn: a.isBuiltIn,
+          isPublic: a.isPublic,
           isActive: a.isActive,
         }));
         set({ assistants });
+        console.log(`[AIStore] 从缓存加载了 ${assistants.length} 个助手`);
       } catch (dbError) {
         console.error("Failed to load from IndexedDB:", dbError);
+        // 完全失败，设置为空数组
+        set({ assistants: [] });
       }
     }
   },
 
   createAssistant: async (assistant) => {
+    // 离线优先：先保存到 IndexedDB
+    const now = Date.now();
+    const tempId = `assistant_${now}_${Math.random().toString(36).substring(2, 9)}`;
+
+    const localAssistant: LocalAIAssistant = {
+      id: tempId,
+      name: assistant.name,
+      description: assistant.description,
+      systemPrompt: assistant.systemPrompt,
+      avatar: assistant.avatar,
+      model: assistant.model || "",
+      temperature: assistant.temperature,
+      maxTokens: assistant.maxTokens,
+      isActive: assistant.isActive ?? true,
+      isPublic: assistant.isPublic ?? false,
+      sortOrder: 0,
+      createdAt: now,
+      updatedAt: now,
+      _pendingSync: true, // 标记为待同步
+    };
+
+    // 1. 先保存到 IndexedDB（立即响应用户）
+    await db.aiAssistants.add(localAssistant);
+
+    // 2. 更新状态
+    set((state) => ({
+      assistants: [...state.assistants, localAssistant],
+    }));
+
+    console.log(`[AIStore] 已创建助手（本地）: ${tempId}`);
+
+    // 3. 后台尝试同步到 PostgreSQL
     try {
-      // 优先调用后端 API 创建
       const response = await aiApi.createAssistant({
-        name: assistant.name,
-        description: assistant.description,
-        systemPrompt: assistant.systemPrompt,
-        avatar: assistant.avatar,
-        model: assistant.model || "",
-        temperature: assistant.temperature,
-        maxTokens: assistant.maxTokens,
+        name: localAssistant.name,
+        description: localAssistant.description,
+        systemPrompt: localAssistant.systemPrompt,
+        avatar: localAssistant.avatar,
+        model: localAssistant.model,
+        temperature: localAssistant.temperature,
+        maxTokens: localAssistant.maxTokens,
+        isActive: localAssistant.isActive,
+        isPublic: localAssistant.isPublic,
       });
-      const newAssistant = response.data;
 
-      // 同步到 IndexedDB
-      await db.aiAssistants.add({
-        id: newAssistant.id,
-        name: newAssistant.name,
-        description: newAssistant.description || "",
-        systemPrompt: newAssistant.systemPrompt,
-        avatar: newAssistant.avatar,
-        model: newAssistant.model,
-        temperature: newAssistant.temperature,
-        maxTokens: newAssistant.maxTokens,
-        isActive: newAssistant.isActive ?? true,
-        isBuiltIn: false,
-        sortOrder: newAssistant.sortOrder,
-        createdAt: newAssistant.createdAt
-          ? new Date(newAssistant.createdAt).getTime()
+      const remoteAssistant = response.data;
+
+      // 4. 同步成功，更新本地 ID 和清除标记
+      const syncedAssistant: LocalAIAssistant = {
+        ...localAssistant,
+        id: remoteAssistant.id,
+        userId: remoteAssistant.userId,
+        sortOrder: remoteAssistant.sortOrder,
+        createdAt: remoteAssistant.createdAt
+          ? new Date(remoteAssistant.createdAt).getTime()
+          : localAssistant.createdAt,
+        updatedAt: remoteAssistant.updatedAt
+          ? new Date(remoteAssistant.updatedAt).getTime()
           : Date.now(),
-        updatedAt: Date.now(),
-      });
+        _pendingSync: undefined, // 清除待同步标记
+      };
 
-      // 更新状态
+      await db.aiAssistants.put(syncedAssistant);
+
+      // 5. 更新状态（使用服务器 ID）
       set((state) => ({
-        assistants: [...state.assistants, newAssistant],
+        assistants: state.assistants.map((a) =>
+          a.id === tempId ? syncedAssistant : a,
+        ),
       }));
-      return newAssistant;
+
+      console.log(
+        `[AIStore] 已同步到服务器: ${tempId} -> ${syncedAssistant.id}`,
+      );
+
+      return syncedAssistant;
     } catch (error) {
-      console.error("Failed to create assistant:", error);
-
-      // 如果后端调用失败，只保存到本地 IndexedDB
-      try {
-        const localId = `custom_${Date.now()}`;
-        const localAssistant = {
-          ...assistant,
-          id: localId,
-          isBuiltIn: false,
-          isActive: true,
-          createdAt: Date.now(),
-          updatedAt: Date.now(),
-        };
-        await db.aiAssistants.add(localAssistant);
-
-        // 标记为待同步
-        await db.aiAssistants.update(localId, { _pendingSync: true });
-
-        set((state) => ({
-          assistants: [...state.assistants, localAssistant],
-        }));
-        console.warn("Assistant saved locally (pending sync when online)");
-        return localAssistant;
-      } catch (dbError) {
-        console.error("Failed to save to IndexedDB:", dbError);
-        throw error;
-      }
+      console.error(`[AIStore] 同步失败，保留待同步标记: ${tempId}`, error);
+      // 同步失败，保留 _pendingSync 标记，下次再试
+      return localAssistant;
     }
   },
 
   updateAssistant: async (id, updates) => {
-    try {
-      // 内置助手不允许修改某些字段
-      const existing = get().assistants.find((a) => a.id === id);
-      if (existing?.isBuiltIn) {
-        // 内置助手只更新本地
-        await db.updateAssistant(id, updates);
-        set((state) => ({
-          assistants: state.assistants.map((a) =>
-            a.id === id ? { ...a, ...updates } : a,
-          ),
-          currentAssistant:
-            state.currentAssistant?.id === id
-              ? { ...state.currentAssistant, ...updates }
-              : state.currentAssistant,
-        }));
-        return;
-      }
+    const existing = get().assistants.find((a) => a.id === id);
+    if (!existing) {
+      throw new Error("Assistant not found");
+    }
 
-      // 自定义助手：优先调用后端 API 更新
+    // 离线优先：所有助手统一处理
+    const now = Date.now();
+
+    // 1. 先更新 IndexedDB（立即响应用户）
+    await db.aiAssistants.update(id, {
+      ...updates,
+      updatedAt: now,
+      _pendingSync: true, // 标记为待同步
+    });
+
+    // 2. 更新状态
+    set((state) => ({
+      assistants: state.assistants.map((a) =>
+        a.id === id ? { ...a, ...updates, updatedAt: now } : a,
+      ),
+      currentAssistant:
+        state.currentAssistant?.id === id
+          ? { ...state.currentAssistant, ...updates, updatedAt: now }
+          : state.currentAssistant,
+    }));
+
+    console.log(`[AIStore] 已更新助手（本地）: ${id}`);
+
+    // 3. 后台尝试同步到 PostgreSQL
+    try {
       await aiApi.updateAssistant(id, updates);
 
-      // 同步到 IndexedDB
-      await db.updateAssistant(id, updates);
+      // 4. 同步成功，清除标记
+      await db.aiAssistants.update(id, {
+        _pendingSync: undefined,
+      });
 
-      // 更新状态
-      set((state) => ({
-        assistants: state.assistants.map((a) =>
-          a.id === id ? { ...a, ...updates } : a,
-        ),
-        currentAssistant:
-          state.currentAssistant?.id === id
-            ? { ...state.currentAssistant, ...updates }
-            : state.currentAssistant,
-      }));
+      console.log(`[AIStore] 已同步更新到服务器: ${id}`);
     } catch (error) {
-      console.error("Failed to update assistant:", error);
-
-      // 如果后端调用失败，只更新 IndexedDB 并标记待同步
-      try {
-        const existing = get().assistants.find((a) => a.id === id);
-        if (existing && !existing.isBuiltIn) {
-          await db.updateAssistant(id, updates);
-          set((state) => ({
-            assistants: state.assistants.map((a) =>
-              a.id === id ? { ...a, ...updates } : a,
-            ),
-            currentAssistant:
-              state.currentAssistant?.id === id
-                ? { ...state.currentAssistant, ...updates }
-                : state.currentAssistant,
-          }));
-          console.warn("Assistant updated locally (pending sync when online)");
-        }
-      } catch (dbError) {
-        console.error("Failed to update IndexedDB:", dbError);
-        throw error;
-      }
+      console.error(`[AIStore] 更新同步失败，保留待同步标记: ${id}`, error);
+      // 同步失败，保留 _pendingSync 标记，下次再试
     }
   },
 
   deleteAssistant: async (id) => {
+    const existing = get().assistants.find((a) => a.id === id);
+    if (!existing) {
+      throw new Error("Assistant not found");
+    }
+
+    // 离线优先：先从 IndexedDB 删除
+    await db.aiAssistants.delete(id);
+
+    // 更新状态（立即从 UI 移除）
+    set((state) => ({
+      assistants: state.assistants.filter((a) => a.id !== id),
+    }));
+
+    console.log(`[AIStore] 已删除助手（本地）: ${id}`);
+
+    // 后台尝试同步到 PostgreSQL
     try {
-      const existing = get().assistants.find((a) => a.id === id);
-      if (existing?.isBuiltIn) {
-        throw new Error("Cannot delete built-in assistant");
-      }
-
-      // 优先调用后端 API 删除
       await aiApi.deleteAssistant(id);
-
-      // 从 IndexedDB 删除
-      await db.aiAssistants.delete(id);
-
-      // 更新状态
-      set((state) => ({
-        assistants: state.assistants.filter((a) => a.id !== id),
-      }));
+      console.log(`[AIStore] 已同步删除到服务器: ${id}`);
     } catch (error) {
-      console.error("Failed to delete assistant:", error);
-
-      // 如果后端调用失败，只从 IndexedDB 删除并标记
-      try {
-        const existing = await db.aiAssistants.get(id);
-        if (existing && !existing.isBuiltIn) {
-          await db.aiAssistants.delete(id);
-          // 保留记录但标记为已删除
-          await db.aiAssistants.add({
-            ...existing,
-            _deleted: true,
-            _pendingSync: true,
-          } as any);
-        }
-        set((state) => ({
-          assistants: state.assistants.filter((a) => a.id !== id),
-        }));
-        console.warn("Assistant deleted locally (pending sync when online)");
-      } catch (dbError) {
-        console.error("Failed to delete from IndexedDB:", dbError);
-        throw error;
-      }
+      console.error(`[AIStore] 删除同步失败: ${id}`, error);
+      // 删除失败，用户界面已经移除了，但服务器可能还存在
+      // 下次加载会重新出现，用户可以再次删除
     }
   },
 
@@ -593,15 +578,23 @@ export const useAIStore = create<AIStore>((set, get) => ({
         .then((note) => note?.fileType === "mindmap")
         .catch(() => false));
 
+    // 检查是否是 DrawIO 笔记
+    const isDrawIO =
+      conversation.noteId &&
+      (await db.notes
+        .get(conversation.noteId)
+        .then((note) => note?.fileType === "drawio")
+        .catch(() => false));
+
     // 获取当前助手的系统提示词
     const currentAssistant = get().currentAssistant;
 
     // 使用上下文管理服务构建消息
-    // 对于思维导图笔记，传入当前用户消息以注入思维导图上下文
+    // 对于思维导图或 DrawIO 笔记，传入当前用户消息以注入图表上下文
     const messages = await buildMessagesForAI(
       conversation,
       currentAssistant.systemPrompt,
-      isMindMap ? { currentUserMessage: content } : {},
+      isMindMap || isDrawIO ? { currentUserMessage: content } : {},
       signal,
     );
 
@@ -819,6 +812,112 @@ export const useAIStore = create<AIStore>((set, get) => ({
     );
   },
 
+  // ============================================
+  // DrawIO 剪贴板操作
+  // ============================================
+  setDrawioClipboard: (data: DrawIOClipboardData) => {
+    set({ drawioClipboard: data });
+    console.log("[AIStore] DrawIO 剪贴板已更新");
+  },
+
+  clearDrawioClipboard: () => {
+    set({ drawioClipboard: null });
+    console.log("[AIStore] DrawIO 剪贴板已清空");
+  },
+
+  getDrawioClipboard: () => {
+    return get().drawioClipboard;
+  },
+
+  sendDrawioToAI: async (fullXML: string, selectedElements?: any[]) => {
+    // 准备剪贴板数据
+    const clipboardData: DrawIOClipboardData = {
+      fullData: fullXML,
+      selectedData: selectedElements || [],
+    };
+
+    // 保存到剪贴板
+    get().setDrawioClipboard(clipboardData);
+
+    // 格式化为用户提示
+    const userPrompt = formatDrawIOForAI(clipboardData);
+
+    // 设置选中的内容
+    const selectedContent: SelectedContent = {
+      type: "drawio_elements",
+      source: "drawio",
+      text: userPrompt,
+      raw: clipboardData,
+      metadata: {
+        count: selectedElements?.length || 0,
+        hasStructure: true,
+        timestamp: Date.now(),
+      },
+    };
+
+    get().setSelectedContent(selectedContent);
+    console.log(
+      `[AIStore] 已发送DrawIO数据到AI助手 (${selectedElements?.length || 0} 个元素)`,
+    );
+  },
+
+  importDrawioFromClipboard: () => {
+    const { currentResponse, currentConversation } = get();
+
+    console.log("[AIStore] importDrawioFromClipboard 被调用");
+    console.log(
+      "[AIStore] currentResponse 长度:",
+      currentResponse?.length || 0,
+    );
+    console.log("[AIStore] currentConversation 存在:", !!currentConversation);
+
+    // 优先使用 currentResponse(流式响应中的)
+    let responseText = currentResponse;
+
+    // 如果 currentResponse 为空,尝试从对话历史中获取最后一条AI消息
+    if (!responseText && currentConversation) {
+      const messages = currentConversation.messages;
+      if (messages && messages.length > 0) {
+        // 从后往前找最后一条assistant消息
+        for (let i = messages.length - 1; i >= 0; i--) {
+          const msg = messages[i];
+          if (msg.role === "assistant") {
+            responseText = msg.content;
+            console.log("[AIStore] 从对话历史获取AI响应, 消息索引:", i);
+            break;
+          }
+        }
+      }
+    }
+
+    if (!responseText) {
+      console.error("[AIStore] 未找到AI响应内容");
+      return {
+        success: false,
+        error: "AI助手没有生成任何内容,请先与AI对话生成DrawIO图表",
+      };
+    }
+
+    console.log("[AIStore] 准备提取XML, 响应长度:", responseText.length);
+
+    // 从AI响应中提取XML
+    const result = extractDrawIOXMLFromResponse(responseText);
+
+    if (result.success && result.data) {
+      console.log("[AIStore] 成功从AI响应中提取DrawIO XML");
+      return {
+        success: true,
+        data: result.data,
+      };
+    } else {
+      console.error("[AIStore] 提取DrawIO XML失败:", result.error);
+      return {
+        success: false,
+        error: result.error || '无法提取有效的DrawIO数据,请使用"粘贴导入"功能',
+      };
+    }
+  },
+
   importMindmapFromClipboard: () => {
     const { currentResponse, currentConversation } = get();
 
@@ -879,28 +978,31 @@ export const useAIStore = create<AIStore>((set, get) => ({
 }));
 
 // 初始化：从数据库加载助手并恢复选择的助手
+// 注意：不再在模块加载时自动加载，而是在用户登录后通过 MainLayout 加载
 if (typeof window !== "undefined") {
-  // 加载助手配置
-  useAIStore.getState().loadAssistants();
-
   const savedAssistantId = localStorage.getItem("selectedAssistant");
   if (savedAssistantId) {
-    // 从数据库中查找保存的助手
+    // 从数据库中查找保存的助手（从 IndexedDB 缓存）
     setTimeout(async () => {
-      const saved = await db.getAssistant(savedAssistantId);
-      if (saved) {
-        useAIStore.getState().setCurrentAssistant({
-          id: saved.id,
-          name: saved.name,
-          description: saved.description,
-          systemPrompt: saved.systemPrompt,
-          avatar: saved.avatar,
-          model: saved.model,
-          temperature: saved.temperature,
-          maxTokens: saved.maxTokens,
-          isBuiltIn: saved.isBuiltIn,
-          isActive: saved.isActive,
-        });
+      try {
+        const saved = await db.aiAssistants.get(savedAssistantId);
+        if (saved) {
+          useAIStore.getState().setCurrentAssistant({
+            id: saved.id,
+            name: saved.name,
+            description: saved.description,
+            systemPrompt: saved.systemPrompt,
+            avatar: saved.avatar,
+            model: saved.model,
+            temperature: saved.temperature,
+            maxTokens: saved.maxTokens,
+            isPublic: saved.isPublic,
+            isActive: saved.isActive,
+          });
+          console.log("[AIStore] 从缓存恢复选择的助手:", saved.name);
+        }
+      } catch (error) {
+        console.warn("[AIStore] 从缓存恢复助手失败:", error);
       }
     }, 0);
   }

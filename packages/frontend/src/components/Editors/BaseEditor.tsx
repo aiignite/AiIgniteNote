@@ -7,7 +7,8 @@ export type EditorAction =
   | "upload" // 上传/导入
   | "preview" // 预览
   | "fullscreen" // 全屏
-  | "share"; // 分享
+  | "share" // 分享
+  | "exportImage"; // 导出图片
 
 // 统一的编辑器 Props
 export interface EditorProps {
@@ -22,6 +23,7 @@ export interface EditorProps {
   onTitleChange: (title: string) => void;
   onSave?: () => void;
   onDownload?: (format: string) => void;
+  onExportImage?: (exportFn: () => Promise<void>) => void;
 
   // Markdown 编辑器专用控制
   previewMode?: "edit" | "live" | "preview";

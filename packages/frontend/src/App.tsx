@@ -1,5 +1,5 @@
 import { Suspense, lazy } from "react";
-import { Routes, Route, Navigate, useLocation } from "react-router-dom";
+import { Routes, Route, Navigate } from "react-router-dom";
 import { Spin } from "antd";
 import MainLayout from "./components/Layout/MainLayout";
 import { useAuthStore } from "./store/authStore";
@@ -30,16 +30,15 @@ function PageLoader() {
 // 路由守卫组件
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
-  const _hasHydrated = useAuthStore((state) => state._hasHydrated);
-  const location = useLocation();
+  const _hasHydrated = useAuthStore((state) => (state as any)._hasHydrated);
 
-  // 如果还没完成恢复，显示加载状态
+  // 等待 zustand persist 恢复完成
   if (!_hasHydrated) {
     return <PageLoader />;
   }
 
   if (!isAuthenticated) {
-    return <Navigate to="/login" state={{ from: location }} replace />;
+    return <Navigate to="/login" replace />;
   }
 
   return <>{children}</>;

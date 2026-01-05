@@ -39,7 +39,7 @@ export const EDITOR_REGISTRY: EditorConfig[] = [
     icon: <ApartmentOutlined />,
     description: "DrawIO 流程图绘制",
     component: DrawIOEditor,
-    supportedActions: ["download", "upload", "fullscreen"],
+    supportedActions: ["download", "upload", "fullscreen", "exportImage"],
   },
   {
     type: NoteFileType.MINDMAP,
@@ -47,7 +47,7 @@ export const EDITOR_REGISTRY: EditorConfig[] = [
     icon: <NodeIndexOutlined />,
     description: "思维导图编辑",
     component: MindMapEditor,
-    supportedActions: ["download", "upload", "fullscreen"],
+    supportedActions: ["download", "upload", "fullscreen", "exportImage"],
   },
   {
     type: NoteFileType.MONACO,

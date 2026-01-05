@@ -1,5 +1,13 @@
-import { useEffect, useRef, useState } from "react";
-import { Button, Space, Dropdown, message, Tooltip, Input, Modal } from "antd";
+import {
+  useEffect,
+  useRef,
+  useState,
+  forwardRef,
+  useImperativeHandle,
+  useCallback,
+} from "react";
+import { Button, Space, Dropdown, Tooltip, Input, Modal, App } from "antd";
+import type { EditorProps } from "./BaseEditor";
 import {
   DeleteOutlined,
   UndoOutlined,
@@ -21,7 +29,7 @@ import MindMap from "simple-mind-map";
 import Themes from "simple-mind-map-plugin-themes";
 import MindMapSelect from "simple-mind-map/src/plugins/Select.js";
 import MindMapDrag from "simple-mind-map/src/plugins/Drag.js";
-import type { EditorProps } from "./BaseEditor";
+import Export from "simple-mind-map/src/plugins/Export.js";
 import { useAIStore } from "../../store/aiStore";
 import type { MindMapNodeData } from "../../types/selection";
 import {
@@ -54,6 +62,15 @@ if (
 ) {
   MindMap.usePlugin(MindMapDrag);
   (window as any).__mindMapDragRegistered__ = true;
+}
+
+// 注册 Export 导出插件 (只执行一次)
+if (
+  typeof window !== "undefined" &&
+  !(window as any).__mindMapExportRegistered__
+) {
+  MindMap.usePlugin(Export);
+  (window as any).__mindMapExportRegistered__ = true;
 }
 
 const EditorContainer = styled.div`
@@ -167,809 +184,873 @@ const themeOptions = [
   { key: "dark7", label: "暗色7", value: "dark7", dark: true },
 ];
 
-function MindMapEditor({
-  title,
-  content,
-  metadata,
-  onChange,
-  onTitleChange,
-}: EditorProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const mindMapRef = useRef<any>(null);
-  const resizeObserverRef = useRef<ResizeObserver | null>(null);
-  const { sendMindmapToAI, importMindmapFromClipboard } = useAIStore();
+const MindMapEditor = forwardRef<any, EditorProps>(
+  (
+    { title, content, metadata, onChange, onTitleChange, onExportImage },
+    ref,
+  ) => {
+    const containerRef = useRef<HTMLDivElement>(null);
+    const mindMapRef = useRef<any>(null);
+    const resizeObserverRef = useRef<ResizeObserver | null>(null);
+    const { message } = App.useApp();
+    const { sendMindmapToAI, importMindmapFromClipboard } = useAIStore();
 
-  // 从 metadata 中读取保存的布局和主题,如果没有则使用默认值
-  const [currentLayout, setCurrentLayout] = useState(
-    metadata?.mindmapLayout || "logicalStructure",
-  );
-  const [currentTheme, setCurrentTheme] = useState(
-    metadata?.mindmapTheme || "classicGreen",
-  );
-  const [helpVisible, setHelpVisible] = useState(false);
-  const [selectedNodeCount, setSelectedNodeCount] = useState(0);
+    // 从 metadata 中读取保存的布局和主题,如果没有则使用默认值
+    const [currentLayout, setCurrentLayout] = useState(
+      metadata?.mindmapLayout || "logicalStructure",
+    );
+    const [currentTheme, setCurrentTheme] = useState(
+      metadata?.mindmapTheme || "classicGreen",
+    );
+    const [helpVisible, setHelpVisible] = useState(false);
+    const [selectedNodeCount, setSelectedNodeCount] = useState(0);
 
-  // 初始化思维导图
-  useEffect(() => {
-    if (!containerRef.current) return;
+    // 初始化思维导图
+    useEffect(() => {
+      if (!containerRef.current) return;
 
-    // 解析已有的思维导图数据
-    let initialData: any = defaultMindData;
-    try {
-      let parsedData = null;
+      // 解析已有的思维导图数据
+      let initialData: any = defaultMindData;
+      try {
+        let parsedData = null;
 
-      if (metadata?.mindmapData) {
-        parsedData = JSON.parse(metadata.mindmapData);
-      } else if (content) {
-        parsedData = JSON.parse(content);
-      }
+        if (metadata?.mindmapData) {
+          parsedData = JSON.parse(metadata.mindmapData);
+        } else if (content) {
+          parsedData = JSON.parse(content);
+        }
 
-      if (parsedData) {
-        // 验证并规范化数据
-        const validation = validateMindMapJSON(parsedData);
-        console.log("[MindMapEditor] 初始化数据验证结果:", validation);
-        console.log("[MindMapEditor] parsedData:", parsedData);
+        if (parsedData) {
+          // 验证并规范化数据
+          const validation = validateMindMapJSON(parsedData);
+          console.log("[MindMapEditor] 初始化数据验证结果:", validation);
+          console.log("[MindMapEditor] parsedData:", parsedData);
 
-        if (validation.valid && validation.normalized) {
-          // 使用规范化后的数据
-          // validateMindMapJSON 返回 simple-mind-map 格式: {data: {text}, children: [...]}
-          initialData = validation.normalized;
-          console.log(
-            "[MindMapEditor] 使用规范化数据加载思维导图:",
-            initialData,
-          );
-          console.log(
-            "[MindMapEditor] initialData.data.text:",
-            initialData.data?.text,
-          );
-          console.log(
-            "[MindMapEditor] initialData.children 数量:",
-            initialData.children?.length,
-          );
+          if (validation.valid && validation.normalized) {
+            // 使用规范化后的数据
+            // validateMindMapJSON 返回 simple-mind-map 格式: {data: {text}, children: [...]}
+            initialData = validation.normalized;
+            console.log(
+              "[MindMapEditor] 使用规范化数据加载思维导图:",
+              initialData,
+            );
+            console.log(
+              "[MindMapEditor] initialData.data.text:",
+              initialData.data?.text,
+            );
+            console.log(
+              "[MindMapEditor] initialData.children 数量:",
+              initialData.children?.length,
+            );
+          } else {
+            console.warn("思维导图数据格式验证失败:", validation.error);
+            // 尝试直接使用(可能是旧格式)
+            initialData = parsedData;
+            console.log("[MindMapEditor] 尝试直接使用原始数据:", initialData);
+          }
         } else {
-          console.warn("思维导图数据格式验证失败:", validation.error);
-          // 尝试直接使用(可能是旧格式)
-          initialData = parsedData;
-          console.log("[MindMapEditor] 尝试直接使用原始数据:", initialData);
+          console.log("[MindMapEditor] 没有找到保存的数据,使用默认数据");
         }
-      } else {
-        console.log("[MindMapEditor] 没有找到保存的数据,使用默认数据");
-      }
-    } catch (error) {
-      console.error("解析思维导图数据失败:", error);
-      initialData = defaultMindData;
-    }
-
-    // 创建思维导图实例
-    // validateMindMapJSON 返回 simple-mind-map 期望的格式: {data: {text}, children: [...]}
-    // 所以这里直接使用 initialData
-    console.log("[MindMapEditor] 传入构造函数的数据:", initialData);
-    console.log(
-      "[MindMapEditor] 构造函数数据格式检查 - data.text:",
-      initialData.data?.text,
-    );
-    console.log(
-      "[MindMapEditor] 构造函数数据格式检查 - children 数量:",
-      initialData.children?.length,
-    );
-
-    const instance = new MindMap({
-      el: containerRef.current,
-      data: initialData,
-      layout: currentLayout as any,
-      theme: currentTheme,
-      // 画布操作
-      enableZoom: true,
-      mouseWheelZoom: true,
-      // 只读模式设置
-      readonly: false,
-      // 快捷键
-      enableShortCut: true,
-      // 节点编辑
-      enableNodeEdit: true,
-      enableNodeRichText: true,
-      // 自由拖拽（可选，有连接线问题）
-      enableFreeDrag: false,
-      // 框选插件配置
-      selectTranslateStep: 3,
-      selectTranslateLimit: 20,
-      // 拖拽插件配置
-      autoMoveWhenMouseInEdgeOnDrag: true,
-      dragPlaceholderRectFill: "rgb(94, 200, 248)",
-      dragMultiNodeRectConfig: {
-        width: 40,
-        height: 20,
-        fill: "rgb(94, 200, 248)",
-      },
-      dragOpacityConfig: { cloneNodeOpacity: 0.5, beingDragNodeOpacity: 0.3 },
-    } as any);
-
-    mindMapRef.current = instance;
-
-    // 监听容器大小变化，当 AI 助手打开/关闭时重新调整画布
-    const resizeObserver = new ResizeObserver(() => {
-      if (mindMapRef.current) {
-        // 使用 requestAnimationFrame 确保在布局更新后再调整
-        requestAnimationFrame(() => {
-          mindMapRef.current?.resize();
-        });
-      }
-    });
-
-    resizeObserverRef.current = resizeObserver;
-
-    if (containerRef.current) {
-      resizeObserver.observe(containerRef.current);
-    }
-
-    // 监听数据变化
-    instance.on("data_change", () => {
-      try {
-        // 使用 getData(false) 获取纯净的节点数据,不包含渲染状态
-        const currentData = mindMapRef.current?.getData(false);
-        if (currentData) {
-          // 直接保存节点数据
-          const jsonData = JSON.stringify(currentData, null, 2);
-          onChange(jsonData, {
-            ...metadata,
-            mindmapData: jsonData,
-            mindmapLayout: currentLayout as
-              | "mindMap"
-              | "logicalStructure"
-              | "organizationStructure"
-              | "catalogOrganization"
-              | "fishbone"
-              | "timeline"
-              | "verticalTimeline",
-            mindmapTheme: currentTheme,
-          });
-        }
-      } catch (e) {
-        console.error("保存数据失败:", e);
-      }
-    });
-
-    // 渲染完成
-    setTimeout(() => {
-      // 渲染完成后的处理
-    }, 500);
-
-    return () => {
-      // 断开 ResizeObserver
-      if (resizeObserverRef.current) {
-        resizeObserverRef.current.disconnect();
-      }
-      try {
-        instance.destroy();
-      } catch (e) {
-        console.error("销毁思维导图失败:", e);
-      }
-    };
-  }, []);
-
-  // 删除节点
-  const handleDeleteNode = () => {
-    if (!mindMapRef.current) return;
-    // 检查是否有选中的节点
-    const activeNodes = mindMapRef.current.renderer.activeNodeList;
-    if (!activeNodes || activeNodes.length === 0) {
-      message.warning("请先选中一个节点");
-      return;
-    }
-    try {
-      mindMapRef.current.execCommand("REMOVE_NODE");
-      message.success("已删除节点");
-    } catch (e) {
-      message.error("删除失败");
-    }
-  };
-
-  // 撤销
-  const handleUndo = () => {
-    if (!mindMapRef.current) return;
-    try {
-      mindMapRef.current.execCommand("BACK");
-    } catch (e) {
-      // 忽略无法撤销的错误
-    }
-  };
-
-  // 重做
-  const handleRedo = () => {
-    if (!mindMapRef.current) return;
-    try {
-      mindMapRef.current.execCommand("FORWARD");
-    } catch (e) {
-      // 忽略无法重做的错误
-    }
-  };
-
-  // 放大
-  const handleZoomIn = () => {
-    if (!mindMapRef.current) return;
-    try {
-      mindMapRef.current.view.enlarge();
-    } catch (e) {}
-  };
-
-  // 缩小
-  const handleZoomOut = () => {
-    if (!mindMapRef.current) return;
-    try {
-      mindMapRef.current.view.narrow();
-    } catch (e) {}
-  };
-
-  // 适应画布
-  const handleFitCanvas = () => {
-    if (!mindMapRef.current) return;
-    try {
-      mindMapRef.current.view.fit();
-    } catch (e) {}
-  };
-
-  // 切换布局
-  const handleLayoutChange = (value: string) => {
-    if (!mindMapRef.current) return;
-    try {
-      mindMapRef.current.setLayout(value);
-      setCurrentLayout(value as any);
-      const layoutName = layoutOptions.find((o) => o.value === value)?.label;
-      message.success(`已切换到${layoutName}`);
-
-      // 保存布局信息
-      try {
-        const currentData = mindMapRef.current.getData(false);
-        if (currentData) {
-          const jsonData = JSON.stringify(currentData, null, 2);
-          onChange(jsonData, {
-            ...metadata,
-            mindmapData: jsonData,
-            mindmapLayout: value as any,
-            mindmapTheme: currentTheme,
-          });
-        }
-      } catch (e) {
-        console.error("保存布局失败:", e);
-      }
-    } catch (e: any) {
-      console.error("切换布局失败:", e);
-      message.error("切换布局失败");
-    }
-  };
-
-  // 切换主题
-  const handleThemeChange = (theme: string) => {
-    if (!mindMapRef.current) {
-      message.error("思维导图未初始化");
-      return;
-    }
-    try {
-      mindMapRef.current.setTheme(theme);
-      setCurrentTheme(theme);
-      const themeName = themeOptions.find((o) => o.value === theme)?.label;
-      message.success(`已切换到${themeName}主题`);
-
-      // 保存主题信息
-      try {
-        const currentData = mindMapRef.current.getData(false);
-        if (currentData) {
-          const jsonData = JSON.stringify(currentData, null, 2);
-          onChange(jsonData, {
-            ...metadata,
-            mindmapData: jsonData,
-            mindmapLayout: currentLayout as any,
-            mindmapTheme: theme,
-          });
-        }
-      } catch (e) {
-        console.error("保存主题失败:", e);
-      }
-    } catch (e: any) {
-      console.error("切换主题失败:", e);
-      message.error("切换主题失败");
-    }
-  };
-
-  // 复制节点
-  const handleCopyNode = () => {
-    if (!mindMapRef.current) return;
-    // 检查是否有选中的节点
-    const activeNodes = mindMapRef.current.renderer.activeNodeList;
-    if (!activeNodes || activeNodes.length === 0) {
-      message.warning("请先选中一个节点");
-      return;
-    }
-    try {
-      mindMapRef.current.renderer.copy();
-      message.success("已复制");
-    } catch (e) {
-      console.error("复制节点失败:", e);
-      message.error("复制失败");
-    }
-  };
-
-  // 剪切节点
-  const handleCutNode = () => {
-    if (!mindMapRef.current) return;
-    // 检查是否有选中的节点
-    const activeNodes = mindMapRef.current.renderer.activeNodeList;
-    if (!activeNodes || activeNodes.length === 0) {
-      message.warning("请先选中一个节点");
-      return;
-    }
-    try {
-      mindMapRef.current.renderer.cut();
-      message.success("已剪切");
-    } catch (e) {
-      console.error("剪切节点失败:", e);
-      message.error("剪切失败");
-    }
-  };
-
-  // 粘贴节点
-  const handlePasteNode = () => {
-    if (!mindMapRef.current) return;
-    // 检查是否有选中的节点作为粘贴目标
-    const activeNodes = mindMapRef.current.renderer.activeNodeList;
-    if (!activeNodes || activeNodes.length === 0) {
-      message.warning("请先选中一个节点作为粘贴目标");
-      return;
-    }
-    try {
-      mindMapRef.current.renderer.paste();
-      message.success("已粘贴");
-    } catch (e) {
-      console.error("粘贴节点失败:", e);
-      message.error("粘贴失败，请先复制节点");
-    }
-  };
-
-  // 从节点列表提取节点数据
-  const extractNodeData = (nodeList: any[]): MindMapNodeData[] => {
-    if (!nodeList || nodeList.length === 0) return [];
-
-    return nodeList.map((node) => {
-      const data = node.getData();
-      return {
-        text: data.text || "",
-        level: data.layerIndex || 0,
-        id: data.uid || node.id,
-      };
-    });
-  };
-
-  // 发送选中节点到 AI 助手
-  const handleSendToAI = () => {
-    if (!mindMapRef.current) return;
-
-    const activeNodes = mindMapRef.current.renderer.activeNodeList;
-    if (!activeNodes || activeNodes.length === 0) {
-      message.warning("请先选中节点");
-      return;
-    }
-
-    try {
-      // 获取完整数据
-      const fullData = mindMapRef.current.getData(false);
-
-      // 提取节点数据
-      const nodeDataList = extractNodeData(activeNodes);
-
-      // 发送到 AI
-      sendMindmapToAI(fullData, nodeDataList);
-
-      message.success(`已将思维导图数据发送到 AI 助手`);
-    } catch (e) {
-      console.error("发送节点到 AI 失败:", e);
-      message.error("发送失败");
-    }
-  };
-
-  // 从 AI 助手剪贴板导入
-  const handleImportFromAI = () => {
-    const result = importMindmapFromClipboard();
-
-    if (!result.success) {
-      message.error(result.error || "导入失败");
-      return;
-    }
-
-    if (!result.data) {
-      message.error("没有可导入的数据");
-      return;
-    }
-
-    try {
-      console.log("[MindMapEditor] 从AI导入原始数据:", result.data);
-
-      // 验证数据结构
-      const validation = validateMindMapJSON(result.data);
-      console.log("[MindMapEditor] 验证结果:", validation);
-
-      if (!validation.valid) {
-        message.error(`数据格式错误: ${validation.error}`);
-        return;
+      } catch (error) {
+        console.error("解析思维导图数据失败:", error);
+        initialData = defaultMindData;
       }
 
-      // 使用规范化后的数据
-      const normalizedData = validation.normalized || result.data;
-      console.log("[MindMapEditor] 规范化后的数据:", normalizedData);
-      console.log("[MindMapEditor] normalizedData.text:", normalizedData.text);
+      // 创建思维导图实例
+      // validateMindMapJSON 返回 simple-mind-map 期望的格式: {data: {text}, children: [...]}
+      // 所以这里直接使用 initialData
+      console.log("[MindMapEditor] 传入构造函数的数据:", initialData);
       console.log(
-        "[MindMapEditor] normalizedData.children 数量:",
-        normalizedData.children?.length,
+        "[MindMapEditor] 构造函数数据格式检查 - data.text:",
+        initialData.data?.text,
+      );
+      console.log(
+        "[MindMapEditor] 构造函数数据格式检查 - children 数量:",
+        initialData.children?.length,
       );
 
-      // 更新思维导图
-      // validateMindMapJSON 已经将数据转换为 simple-mind-map 期望的格式: {text, children}
-      mindMapRef.current?.setData(normalizedData);
+      const instance = new MindMap({
+        el: containerRef.current,
+        data: initialData,
+        layout: currentLayout as any,
+        theme: currentTheme,
+        // 画布操作
+        enableZoom: true,
+        mouseWheelZoom: true,
+        // 只读模式设置
+        readonly: false,
+        // 快捷键
+        enableShortCut: true,
+        // 节点编辑
+        enableNodeEdit: true,
+        enableNodeRichText: true,
+        // 自由拖拽（可选，有连接线问题）
+        enableFreeDrag: false,
+        // 框选插件配置
+        selectTranslateStep: 3,
+        selectTranslateLimit: 20,
+        // 拖拽插件配置
+        autoMoveWhenMouseInEdgeOnDrag: true,
+        dragPlaceholderRectFill: "rgb(94, 200, 248)",
+        dragMultiNodeRectConfig: {
+          width: 40,
+          height: 20,
+          fill: "rgb(94, 200, 248)",
+        },
+        dragOpacityConfig: { cloneNodeOpacity: 0.5, beingDragNodeOpacity: 0.3 },
+      } as any);
 
-      // 保存到笔记
-      const jsonData = JSON.stringify(result.data, null, 2);
-      onChange(jsonData, {
-        ...metadata,
-        mindmapData: jsonData,
-        mindmapLayout: currentLayout,
-        mindmapTheme: currentTheme,
+      mindMapRef.current = instance;
+
+      // 标志：是否已经完成初始化
+      let isInitialized = false;
+
+      // 监听容器大小变化，当 AI 助手打开/关闭时重新调整画布
+      const resizeObserver = new ResizeObserver(() => {
+        if (mindMapRef.current) {
+          // 使用 requestAnimationFrame 确保在布局更新后再调整
+          requestAnimationFrame(() => {
+            mindMapRef.current?.resize();
+          });
+        }
       });
 
-      message.success("已从 AI 助手导入思维导图");
-    } catch (error) {
-      console.error("导入失败:", error);
-      message.error("导入失败");
-    }
-  };
+      resizeObserverRef.current = resizeObserver;
 
-  // 从系统剪贴板导入
-  const handleImportFromClipboard = async () => {
-    try {
-      // 从系统剪贴板读取
-      const clipboardText = await navigator.clipboard.readText();
-
-      if (!clipboardText.trim()) {
-        message.warning("剪贴板为空");
-        return;
+      if (containerRef.current) {
+        resizeObserver.observe(containerRef.current);
       }
 
-      console.log(
-        "[MindMapEditor] 从剪贴板读取的内容长度:",
-        clipboardText.length,
-      );
-
-      // 尝试解析JSON
-      let jsonData;
-      try {
-        jsonData = JSON.parse(clipboardText);
-        console.log("[MindMapEditor] 解析后的 JSON:", jsonData);
-      } catch (parseError) {
-        console.log("[MindMapEditor] 直接解析失败，尝试提取代码块");
-        // 如果直接解析失败,尝试提取代码块
-        const extractResult = extractMindMapJSONFromResponse(clipboardText);
-        if (extractResult.success && extractResult.data) {
-          jsonData = extractResult.data;
-          console.log("[MindMapEditor] 提取代码块后的数据:", jsonData);
-        } else {
-          message.error("剪贴板内容不是有效的思维导图JSON");
+      // 监听数据变化
+      instance.on("data_change", () => {
+        // 跳过初始化时的 data_change 事件
+        if (!isInitialized) {
           return;
         }
+
+        try {
+          // 使用 getData(false) 获取纯净的节点数据,不包含渲染状态
+          const currentData = mindMapRef.current?.getData(false);
+          if (currentData) {
+            // 直接保存节点数据
+            const jsonData = JSON.stringify(currentData, null, 2);
+            onChange(jsonData, {
+              ...metadata,
+              mindmapData: jsonData,
+              mindmapLayout: currentLayout as
+                | "mindMap"
+                | "logicalStructure"
+                | "organizationStructure"
+                | "catalogOrganization"
+                | "fishbone"
+                | "timeline"
+                | "verticalTimeline",
+              mindmapTheme: currentTheme,
+            });
+          }
+        } catch (e) {
+          console.error("保存数据失败:", e);
+        }
+      });
+
+      // 标记初始化完成（延迟执行，确保初始 data_change 已经触发）
+      setTimeout(() => {
+        isInitialized = true;
+      }, 500);
+
+      // 渲染完成
+      setTimeout(() => {
+        // 渲染完成后的处理
+        // 导出图片功能已通过 useImperativeHandle 暴露，无需再通过回调注册
+      }, 500);
+
+      return () => {
+        // 断开 ResizeObserver
+        if (resizeObserverRef.current) {
+          resizeObserverRef.current.disconnect();
+        }
+        try {
+          instance.destroy();
+        } catch (e) {
+          console.error("销毁思维导图失败:", e);
+        }
+      };
+    }, []);
+
+    // 删除节点
+    const handleDeleteNode = () => {
+      if (!mindMapRef.current) return;
+      // 检查是否有选中的节点
+      const activeNodes = mindMapRef.current.renderer.activeNodeList;
+      if (!activeNodes || activeNodes.length === 0) {
+        message.warning("请先选中一个节点");
+        return;
       }
+      try {
+        mindMapRef.current.execCommand("REMOVE_NODE");
+        message.success("已删除节点");
+      } catch (e) {
+        message.error("删除失败");
+      }
+    };
 
-      // 验证数据结构
-      const validation = validateMindMapJSON(jsonData);
-      console.log("[MindMapEditor] 验证结果:", validation);
+    // 撤销
+    const handleUndo = () => {
+      if (!mindMapRef.current) return;
+      try {
+        mindMapRef.current.execCommand("BACK");
+      } catch (e) {
+        // 忽略无法撤销的错误
+      }
+    };
 
-      if (!validation.valid) {
-        message.error(`数据格式错误: ${validation.error}`);
+    // 重做
+    const handleRedo = () => {
+      if (!mindMapRef.current) return;
+      try {
+        mindMapRef.current.execCommand("FORWARD");
+      } catch (e) {
+        // 忽略无法重做的错误
+      }
+    };
+
+    // 放大
+    const handleZoomIn = () => {
+      if (!mindMapRef.current) return;
+      try {
+        mindMapRef.current.view.enlarge();
+      } catch (e) {}
+    };
+
+    // 缩小
+    const handleZoomOut = () => {
+      if (!mindMapRef.current) return;
+      try {
+        mindMapRef.current.view.narrow();
+      } catch (e) {}
+    };
+
+    // 适应画布
+    const handleFitCanvas = () => {
+      if (!mindMapRef.current) return;
+      try {
+        mindMapRef.current.view.fit();
+      } catch (e) {}
+    };
+
+    // 切换布局
+    const handleLayoutChange = (value: string) => {
+      if (!mindMapRef.current) return;
+      try {
+        mindMapRef.current.setLayout(value);
+        setCurrentLayout(value as any);
+        const layoutName = layoutOptions.find((o) => o.value === value)?.label;
+        message.success(`已切换到${layoutName}`);
+
+        // 保存布局信息
+        try {
+          const currentData = mindMapRef.current.getData(false);
+          if (currentData) {
+            const jsonData = JSON.stringify(currentData, null, 2);
+            onChange(jsonData, {
+              ...metadata,
+              mindmapData: jsonData,
+              mindmapLayout: value as any,
+              mindmapTheme: currentTheme,
+            });
+          }
+        } catch (e) {
+          console.error("保存布局失败:", e);
+        }
+      } catch (e: any) {
+        console.error("切换布局失败:", e);
+        message.error("切换布局失败");
+      }
+    };
+
+    // 切换主题
+    const handleThemeChange = (theme: string) => {
+      if (!mindMapRef.current) {
+        message.error("思维导图未初始化");
+        return;
+      }
+      try {
+        mindMapRef.current.setTheme(theme);
+        setCurrentTheme(theme);
+        const themeName = themeOptions.find((o) => o.value === theme)?.label;
+        message.success(`已切换到${themeName}主题`);
+
+        // 保存主题信息
+        try {
+          const currentData = mindMapRef.current.getData(false);
+          if (currentData) {
+            const jsonData = JSON.stringify(currentData, null, 2);
+            onChange(jsonData, {
+              ...metadata,
+              mindmapData: jsonData,
+              mindmapLayout: currentLayout as any,
+              mindmapTheme: theme,
+            });
+          }
+        } catch (e) {
+          console.error("保存主题失败:", e);
+        }
+      } catch (e: any) {
+        console.error("切换主题失败:", e);
+        message.error("切换主题失败");
+      }
+    };
+
+    // 复制节点
+    const handleCopyNode = () => {
+      if (!mindMapRef.current) return;
+      // 检查是否有选中的节点
+      const activeNodes = mindMapRef.current.renderer.activeNodeList;
+      if (!activeNodes || activeNodes.length === 0) {
+        message.warning("请先选中一个节点");
+        return;
+      }
+      try {
+        mindMapRef.current.renderer.copy();
+        message.success("已复制");
+      } catch (e) {
+        console.error("复制节点失败:", e);
+        message.error("复制失败");
+      }
+    };
+
+    // 剪切节点
+    const handleCutNode = () => {
+      if (!mindMapRef.current) return;
+      // 检查是否有选中的节点
+      const activeNodes = mindMapRef.current.renderer.activeNodeList;
+      if (!activeNodes || activeNodes.length === 0) {
+        message.warning("请先选中一个节点");
+        return;
+      }
+      try {
+        mindMapRef.current.renderer.cut();
+        message.success("已剪切");
+      } catch (e) {
+        console.error("剪切节点失败:", e);
+        message.error("剪切失败");
+      }
+    };
+
+    // 粘贴节点
+    const handlePasteNode = () => {
+      if (!mindMapRef.current) return;
+      // 检查是否有选中的节点作为粘贴目标
+      const activeNodes = mindMapRef.current.renderer.activeNodeList;
+      if (!activeNodes || activeNodes.length === 0) {
+        message.warning("请先选中一个节点作为粘贴目标");
+        return;
+      }
+      try {
+        mindMapRef.current.renderer.paste();
+        message.success("已粘贴");
+      } catch (e) {
+        console.error("粘贴节点失败:", e);
+        message.error("粘贴失败，请先复制节点");
+      }
+    };
+
+    // 从节点列表提取节点数据
+    const extractNodeData = (nodeList: any[]): MindMapNodeData[] => {
+      if (!nodeList || nodeList.length === 0) return [];
+
+      return nodeList.map((node) => {
+        const data = node.getData();
+        return {
+          text: data.text || "",
+          level: data.layerIndex || 0,
+          id: data.uid || node.id,
+        };
+      });
+    };
+
+    // 发送选中节点到 AI 助手
+    const handleSendToAI = () => {
+      if (!mindMapRef.current) return;
+
+      const activeNodes = mindMapRef.current.renderer.activeNodeList;
+      if (!activeNodes || activeNodes.length === 0) {
+        message.warning("请先选中节点");
         return;
       }
 
-      // 使用规范化后的数据
-      const normalizedData = validation.normalized || jsonData;
-      console.log("[MindMapEditor] 规范化后的数据:", normalizedData);
-      console.log("[MindMapEditor] normalizedData.text:", normalizedData.text);
-      console.log(
-        "[MindMapEditor] normalizedData.children 数量:",
-        normalizedData.children?.length,
-      );
+      try {
+        // 获取完整数据
+        const fullData = mindMapRef.current.getData(false);
 
-      // 更新思维导图
-      // validateMindMapJSON 已经将数据转换为 simple-mind-map 期望的格式: {text, children}
-      // 所以这里直接使用 normalizedData 即可
-      console.log("[MindMapEditor] 准备调用 setData...");
-      console.log(
-        "[MindMapEditor] mindMapRef.current 是否存在:",
-        !!mindMapRef.current,
-      );
+        // 提取节点数据
+        const nodeDataList = extractNodeData(activeNodes);
 
-      if (mindMapRef.current) {
-        console.log("[MindMapEditor] setData 之前的数据:", normalizedData);
-        mindMapRef.current.setData(normalizedData);
-        console.log("[MindMapEditor] setData 调用完成");
+        // 发送到 AI
+        sendMindmapToAI(fullData, nodeDataList);
 
-        // 检查 setData 后的数据
-        const dataAfterSet = mindMapRef.current.getData(false);
-        console.log("[MindMapEditor] setData 后的数据:", dataAfterSet);
-
-        // 强制重新渲染
-        setTimeout(() => {
-          console.log("[MindMapEditor] 触发重新渲染");
-          mindMapRef.current?.render();
-        }, 100);
-
-        // 调整视图以适应新数据
-        setTimeout(() => {
-          console.log("[MindMapEditor] 调整视图适应");
-          mindMapRef.current?.view.fit();
-        }, 200);
-      }
-
-      // 保存到笔记
-      const jsonString = JSON.stringify(jsonData, null, 2);
-      onChange(jsonString, {
-        ...metadata,
-        mindmapData: jsonString,
-        mindmapLayout: currentLayout,
-        mindmapTheme: currentTheme,
-      });
-
-      message.success("已从剪贴板导入思维导图");
-    } catch (error) {
-      console.error("从剪贴板导入失败:", error);
-      if (error instanceof Error && error.name === "NotAllowedError") {
-        message.error("无法访问剪贴板,请授予权限或手动粘贴");
-      } else {
-        message.error("导入失败,请确保剪贴板中有有效的JSON数据");
-      }
-    }
-  };
-  useEffect(() => {
-    if (!mindMapRef.current) return;
-
-    const handleNodeSelect = () => {
-      const activeNodes = mindMapRef.current?.renderer.activeNodeList;
-      const count = activeNodes?.length || 0;
-      setSelectedNodeCount(count);
-    };
-
-    // 监听节点选中事件
-    mindMapRef.current.on("node_active", handleNodeSelect);
-    mindMapRef.current.on("node_inactive", handleNodeSelect);
-
-    return () => {
-      if (mindMapRef.current) {
-        mindMapRef.current.off("node_active", handleNodeSelect);
-        mindMapRef.current.off("node_inactive", handleNodeSelect);
+        message.success(`已将思维导图数据发送到 AI 助手`);
+      } catch (e) {
+        console.error("发送节点到 AI 失败:", e);
+        message.error("发送失败");
       }
     };
-  }, []);
 
-  return (
-    <EditorContainer>
-      {/* 标题输入 */}
-      <TitleInput
-        placeholder="请输入标题..."
-        value={title}
-        onChange={(e) => onTitleChange(e.target.value)}
-        variant="borderless"
-      />
+    // 从 AI 助手剪贴板导入
+    const handleImportFromAI = () => {
+      const result = importMindmapFromClipboard();
 
-      <Toolbar>
-        {/* 节点操作 */}
-        <Space size="small">
-          <Tooltip title="删除节点 (Delete)">
-            <Button
-              icon={<DeleteOutlined />}
-              onClick={handleDeleteNode}
-              size="small"
-              danger
-            />
-          </Tooltip>
+      if (!result.success) {
+        message.error(result.error || "导入失败");
+        return;
+      }
 
-          {/* 发送到 AI 助手 */}
-          <Tooltip
-            title={`发送选中节点到 AI 助手 ${selectedNodeCount > 0 ? `(${selectedNodeCount} 个节点)` : ""}`}
+      if (!result.data) {
+        message.error("没有可导入的数据");
+        return;
+      }
+
+      try {
+        console.log("[MindMapEditor] 从AI导入原始数据:", result.data);
+
+        // 验证数据结构
+        const validation = validateMindMapJSON(result.data);
+        console.log("[MindMapEditor] 验证结果:", validation);
+
+        if (!validation.valid) {
+          message.error(`数据格式错误: ${validation.error}`);
+          return;
+        }
+
+        // 使用规范化后的数据
+        const normalizedData = validation.normalized || result.data;
+        console.log("[MindMapEditor] 规范化后的数据:", normalizedData);
+        console.log(
+          "[MindMapEditor] normalizedData.text:",
+          normalizedData.text,
+        );
+        console.log(
+          "[MindMapEditor] normalizedData.children 数量:",
+          normalizedData.children?.length,
+        );
+
+        // 更新思维导图
+        // validateMindMapJSON 已经将数据转换为 simple-mind-map 期望的格式: {text, children}
+        mindMapRef.current?.setData(normalizedData);
+
+        // 保存到笔记
+        const jsonData = JSON.stringify(result.data, null, 2);
+        onChange(jsonData, {
+          ...metadata,
+          mindmapData: jsonData,
+          mindmapLayout: currentLayout,
+          mindmapTheme: currentTheme,
+        });
+
+        message.success("已从 AI 助手导入思维导图");
+      } catch (error) {
+        console.error("导入失败:", error);
+        message.error("导入失败");
+      }
+    };
+
+    // 从系统剪贴板导入
+    const handleImportFromClipboard = async () => {
+      try {
+        // 从系统剪贴板读取
+        const clipboardText = await navigator.clipboard.readText();
+
+        if (!clipboardText.trim()) {
+          message.warning("剪贴板为空");
+          return;
+        }
+
+        console.log(
+          "[MindMapEditor] 从剪贴板读取的内容长度:",
+          clipboardText.length,
+        );
+
+        // 尝试解析JSON
+        let jsonData;
+        try {
+          jsonData = JSON.parse(clipboardText);
+          console.log("[MindMapEditor] 解析后的 JSON:", jsonData);
+        } catch (parseError) {
+          console.log("[MindMapEditor] 直接解析失败，尝试提取代码块");
+          // 如果直接解析失败,尝试提取代码块
+          const extractResult = extractMindMapJSONFromResponse(clipboardText);
+          if (extractResult.success && extractResult.data) {
+            jsonData = extractResult.data;
+            console.log("[MindMapEditor] 提取代码块后的数据:", jsonData);
+          } else {
+            message.error("剪贴板内容不是有效的思维导图JSON");
+            return;
+          }
+        }
+
+        // 验证数据结构
+        const validation = validateMindMapJSON(jsonData);
+        console.log("[MindMapEditor] 验证结果:", validation);
+
+        if (!validation.valid) {
+          message.error(`数据格式错误: ${validation.error}`);
+          return;
+        }
+
+        // 使用规范化后的数据
+        const normalizedData = validation.normalized || jsonData;
+        console.log("[MindMapEditor] 规范化后的数据:", normalizedData);
+        console.log(
+          "[MindMapEditor] normalizedData.text:",
+          normalizedData.text,
+        );
+        console.log(
+          "[MindMapEditor] normalizedData.children 数量:",
+          normalizedData.children?.length,
+        );
+
+        // 更新思维导图
+        // validateMindMapJSON 已经将数据转换为 simple-mind-map 期望的格式: {text, children}
+        // 所以这里直接使用 normalizedData 即可
+        console.log("[MindMapEditor] 准备调用 setData...");
+        console.log(
+          "[MindMapEditor] mindMapRef.current 是否存在:",
+          !!mindMapRef.current,
+        );
+
+        if (mindMapRef.current) {
+          console.log("[MindMapEditor] setData 之前的数据:", normalizedData);
+          mindMapRef.current.setData(normalizedData);
+          console.log("[MindMapEditor] setData 调用完成");
+
+          // 检查 setData 后的数据
+          const dataAfterSet = mindMapRef.current.getData(false);
+          console.log("[MindMapEditor] setData 后的数据:", dataAfterSet);
+
+          // 强制重新渲染
+          setTimeout(() => {
+            console.log("[MindMapEditor] 触发重新渲染");
+            mindMapRef.current?.render();
+          }, 100);
+
+          // 调整视图以适应新数据
+          setTimeout(() => {
+            console.log("[MindMapEditor] 调整视图适应");
+            mindMapRef.current?.view.fit();
+          }, 200);
+        }
+
+        // 保存到笔记
+        const jsonString = JSON.stringify(jsonData, null, 2);
+        onChange(jsonString, {
+          ...metadata,
+          mindmapData: jsonString,
+          mindmapLayout: currentLayout,
+          mindmapTheme: currentTheme,
+        });
+
+        message.success("已从剪贴板导入思维导图");
+      } catch (error) {
+        console.error("从剪贴板导入失败:", error);
+        if (error instanceof Error && error.name === "NotAllowedError") {
+          message.error("无法访问剪贴板,请授予权限或手动粘贴");
+        } else {
+          message.error("导入失败,请确保剪贴板中有有效的JSON数据");
+        }
+      }
+    };
+
+    useEffect(() => {
+      if (!mindMapRef.current) return;
+
+      const handleNodeSelect = () => {
+        const activeNodes = mindMapRef.current?.renderer.activeNodeList;
+        const count = activeNodes?.length || 0;
+        setSelectedNodeCount(count);
+      };
+
+      // 监听节点选中事件
+      mindMapRef.current.on("node_active", handleNodeSelect);
+      mindMapRef.current.on("node_inactive", handleNodeSelect);
+
+      return () => {
+        if (mindMapRef.current) {
+          mindMapRef.current.off("node_active", handleNodeSelect);
+          mindMapRef.current.off("node_inactive", handleNodeSelect);
+        }
+      };
+    }, []);
+
+    // 导出图片方法
+    const exportImage = useCallback(async () => {
+      try {
+        // 使用 simple-mind-map 的 Export 插件导出 PNG，设置白色背景
+        const dataUrl = await mindMapRef.current?.doExport.png({
+          quality: 1,
+          backgroundColor: "#ffffff",
+          padding: 20,
+        });
+        if (!dataUrl) {
+          throw new Error("导出失败");
+        }
+        // 下载图片
+        const link = document.createElement("a");
+        link.download = `${title || "思维导图"}.png`;
+        link.href = dataUrl;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        message.success("已导出为 PNG 图片");
+      } catch (error: any) {
+        console.error("导出图片失败:", error);
+        message.error("导出图片失败: " + error.message);
+        throw error;
+      }
+    }, [title, message]);
+
+    // 暴露方法供外部调用
+    useImperativeHandle(ref, () => ({
+      exportImage,
+    }));
+
+    return (
+      <EditorContainer>
+        {/* 标题输入 */}
+        <TitleInput
+          placeholder="请输入标题..."
+          value={title}
+          onChange={(e) => onTitleChange(e.target.value)}
+          variant="borderless"
+        />
+
+        <Toolbar>
+          {/* 节点操作 */}
+          <Space size="small">
+            <Tooltip title="删除节点 (Delete)">
+              <Button
+                icon={<DeleteOutlined />}
+                onClick={handleDeleteNode}
+                size="small"
+                danger
+              />
+            </Tooltip>
+
+            {/* 发送到 AI 助手 */}
+            <Tooltip
+              title={`发送选中节点到 AI 助手 ${selectedNodeCount > 0 ? `(${selectedNodeCount} 个节点)` : ""}`}
+            >
+              <Button
+                type="primary"
+                icon={<SendOutlined />}
+                onClick={handleSendToAI}
+                size="small"
+                disabled={selectedNodeCount === 0}
+              />
+            </Tooltip>
+
+            {/* 从 AI 导入 */}
+            <Tooltip title="从 AI 助手导入">
+              <Button
+                type="primary"
+                icon={<ImportOutlined />}
+                onClick={handleImportFromAI}
+                size="small"
+              />
+            </Tooltip>
+
+            {/* 从剪贴板导入 */}
+            <Tooltip title="从系统剪贴板导入(支持手工复制)">
+              <Button
+                type="primary"
+                icon={<CopyOutlined />}
+                onClick={handleImportFromClipboard}
+                size="small"
+              />
+            </Tooltip>
+          </Space>
+
+          {/* 复制粘贴 */}
+          <Space size="small">
+            <Tooltip title="复制 (Ctrl+C)">
+              <Button
+                icon={<CopyOutlined />}
+                onClick={handleCopyNode}
+                size="small"
+              />
+            </Tooltip>
+            <Tooltip title="剪切 (Ctrl+X)">
+              <Button
+                icon={<ScissorOutlined />}
+                onClick={handleCutNode}
+                size="small"
+              />
+            </Tooltip>
+            <Tooltip title="粘贴 (Ctrl+V)">
+              <Button
+                icon={<SnippetsOutlined />}
+                onClick={handlePasteNode}
+                size="small"
+              />
+            </Tooltip>
+          </Space>
+
+          {/* 撤销重做 */}
+          <Space size="small">
+            <Tooltip title="撤销 (Ctrl+Z)">
+              <Button
+                icon={<UndoOutlined />}
+                onClick={handleUndo}
+                size="small"
+              />
+            </Tooltip>
+            <Tooltip title="重做 (Ctrl+Y)">
+              <Button
+                icon={<RedoOutlined />}
+                onClick={handleRedo}
+                size="small"
+              />
+            </Tooltip>
+          </Space>
+
+          {/* 视图控制 */}
+          <Space size="small">
+            <Tooltip title="放大 (Ctrl++)">
+              <Button
+                icon={<ZoomInOutlined />}
+                onClick={handleZoomIn}
+                size="small"
+              />
+            </Tooltip>
+            <Tooltip title="缩小 (Ctrl+-)">
+              <Button
+                icon={<ZoomOutOutlined />}
+                onClick={handleZoomOut}
+                size="small"
+              />
+            </Tooltip>
+            <Tooltip title="适应画布 (Ctrl+I)">
+              <Button
+                icon={<FullscreenOutlined />}
+                onClick={handleFitCanvas}
+                size="small"
+              />
+            </Tooltip>
+          </Space>
+
+          {/* 布局切换 */}
+          <Dropdown
+            menu={{
+              items: layoutOptions as any,
+              onClick: ({ key }) => handleLayoutChange(key as string),
+              selectedKeys: [currentLayout],
+            }}
           >
-            <Button
-              type="primary"
-              icon={<SendOutlined />}
-              onClick={handleSendToAI}
-              size="small"
-              disabled={selectedNodeCount === 0}
-            />
-          </Tooltip>
+            <Tooltip title="切换布局">
+              <Button icon={<LayoutOutlined />} size="small" />
+            </Tooltip>
+          </Dropdown>
 
-          {/* 从 AI 导入 */}
-          <Tooltip title="从 AI 助手导入">
-            <Button
-              type="primary"
-              icon={<ImportOutlined />}
-              onClick={handleImportFromAI}
-              size="small"
-            />
-          </Tooltip>
+          {/* 主题切换 */}
+          <Dropdown
+            menu={{
+              items: themeOptions as any,
+              onClick: ({ key }) => handleThemeChange(key as string),
+              selectedKeys: [currentTheme],
+            }}
+          >
+            <Tooltip title="切换主题">
+              <Button icon={<BgColorsOutlined />} size="small" />
+            </Tooltip>
+          </Dropdown>
 
-          {/* 从剪贴板导入 */}
-          <Tooltip title="从系统剪贴板导入(支持手工复制)">
+          {/* 帮助按钮 */}
+          <Tooltip title="操作指南">
             <Button
-              type="primary"
-              icon={<CopyOutlined />}
-              onClick={handleImportFromClipboard}
+              icon={<QuestionCircleOutlined />}
               size="small"
+              onClick={() => setHelpVisible(true)}
             />
           </Tooltip>
-        </Space>
+        </Toolbar>
 
-        {/* 复制粘贴 */}
-        <Space size="small">
-          <Tooltip title="复制 (Ctrl+C)">
-            <Button
-              icon={<CopyOutlined />}
-              onClick={handleCopyNode}
-              size="small"
-            />
-          </Tooltip>
-          <Tooltip title="剪切 (Ctrl+X)">
-            <Button
-              icon={<ScissorOutlined />}
-              onClick={handleCutNode}
-              size="small"
-            />
-          </Tooltip>
-          <Tooltip title="粘贴 (Ctrl+V)">
-            <Button
-              icon={<SnippetsOutlined />}
-              onClick={handlePasteNode}
-              size="small"
-            />
-          </Tooltip>
-        </Space>
+        <CanvasContainer ref={containerRef} />
 
-        {/* 撤销重做 */}
-        <Space size="small">
-          <Tooltip title="撤销 (Ctrl+Z)">
-            <Button icon={<UndoOutlined />} onClick={handleUndo} size="small" />
-          </Tooltip>
-          <Tooltip title="重做 (Ctrl+Y)">
-            <Button icon={<RedoOutlined />} onClick={handleRedo} size="small" />
-          </Tooltip>
-        </Space>
-
-        {/* 视图控制 */}
-        <Space size="small">
-          <Tooltip title="放大 (Ctrl++)">
-            <Button
-              icon={<ZoomInOutlined />}
-              onClick={handleZoomIn}
-              size="small"
-            />
-          </Tooltip>
-          <Tooltip title="缩小 (Ctrl+-)">
-            <Button
-              icon={<ZoomOutOutlined />}
-              onClick={handleZoomOut}
-              size="small"
-            />
-          </Tooltip>
-          <Tooltip title="适应画布 (Ctrl+I)">
-            <Button
-              icon={<FullscreenOutlined />}
-              onClick={handleFitCanvas}
-              size="small"
-            />
-          </Tooltip>
-        </Space>
-
-        {/* 布局切换 */}
-        <Dropdown
-          menu={{
-            items: layoutOptions as any,
-            onClick: ({ key }) => handleLayoutChange(key as string),
-            selectedKeys: [currentLayout],
-          }}
+        {/* 操作指南弹窗 */}
+        <Modal
+          title="思维导图操作指南"
+          open={helpVisible}
+          onCancel={() => setHelpVisible(false)}
+          footer={[
+            <Button key="close" onClick={() => setHelpVisible(false)}>
+              我知道了
+            </Button>,
+          ]}
+          width={600}
         >
-          <Tooltip title="切换布局">
-            <Button icon={<LayoutOutlined />} size="small" />
-          </Tooltip>
-        </Dropdown>
+          <div style={{ lineHeight: "1.8" }}>
+            <h3>📝 节点编辑</h3>
+            <ul>
+              <li>
+                <strong>双击节点</strong> - 编辑节点文本内容
+              </li>
+              <li>
+                <strong>Tab 键</strong> - 添加子节点
+              </li>
+              <li>
+                <strong>Enter 键</strong> - 添加兄弟节点（同级节点）
+              </li>
+              <li>
+                <strong>Delete 键</strong> - 删除选中的节点
+              </li>
+            </ul>
 
-        {/* 主题切换 */}
-        <Dropdown
-          menu={{
-            items: themeOptions as any,
-            onClick: ({ key }) => handleThemeChange(key as string),
-            selectedKeys: [currentTheme],
-          }}
-        >
-          <Tooltip title="切换主题">
-            <Button icon={<BgColorsOutlined />} size="small" />
-          </Tooltip>
-        </Dropdown>
+            <h3>🖱️ 鼠标操作</h3>
+            <ul>
+              <li>
+                <strong>左键拖动</strong> - 移动画布位置
+              </li>
+              <li>
+                <strong>滚轮</strong> - 缩放画布大小
+              </li>
+              <li>
+                <strong>右键拖动</strong> - 框选多个节点
+              </li>
+              <li>
+                <strong>点击节点</strong> - 选中节点（可多选）
+              </li>
+            </ul>
 
-        {/* 帮助按钮 */}
-        <Tooltip title="操作指南">
-          <Button
-            icon={<QuestionCircleOutlined />}
-            size="small"
-            onClick={() => setHelpVisible(true)}
-          />
-        </Tooltip>
-      </Toolbar>
+            <h3>✂️ 编辑功能</h3>
+            <ul>
+              <li>
+                <strong>复制/剪切/粘贴</strong> - 使用工具栏按钮或快捷键
+                Ctrl+C/Ctrl+V/Ctrl+X
+              </li>
+              <li>
+                <strong>撤销/重做</strong> - 使用工具栏按钮或快捷键
+                Ctrl+Z/Ctrl+Y
+              </li>
+            </ul>
 
-      <CanvasContainer ref={containerRef} />
+            <h3>🎨 视图控制</h3>
+            <ul>
+              <li>
+                <strong>切换布局</strong> - 点击布局图标，选择不同的思维导图结构
+              </li>
+              <li>
+                <strong>切换主题</strong> - 点击主题图标，选择不同的颜色样式
+              </li>
+              <li>
+                <strong>适应画布</strong> - 自动调整视图以显示完整导图
+              </li>
+            </ul>
+          </div>
+        </Modal>
+      </EditorContainer>
+    );
+  },
+);
 
-      {/* 操作指南弹窗 */}
-      <Modal
-        title="思维导图操作指南"
-        open={helpVisible}
-        onCancel={() => setHelpVisible(false)}
-        footer={[
-          <Button key="close" onClick={() => setHelpVisible(false)}>
-            我知道了
-          </Button>,
-        ]}
-        width={600}
-      >
-        <div style={{ lineHeight: "1.8" }}>
-          <h3>📝 节点编辑</h3>
-          <ul>
-            <li>
-              <strong>双击节点</strong> - 编辑节点文本内容
-            </li>
-            <li>
-              <strong>Tab 键</strong> - 添加子节点
-            </li>
-            <li>
-              <strong>Enter 键</strong> - 添加兄弟节点（同级节点）
-            </li>
-            <li>
-              <strong>Delete 键</strong> - 删除选中的节点
-            </li>
-          </ul>
-
-          <h3>🖱️ 鼠标操作</h3>
-          <ul>
-            <li>
-              <strong>左键拖动</strong> - 移动画布位置
-            </li>
-            <li>
-              <strong>滚轮</strong> - 缩放画布大小
-            </li>
-            <li>
-              <strong>右键拖动</strong> - 框选多个节点
-            </li>
-            <li>
-              <strong>点击节点</strong> - 选中节点（可多选）
-            </li>
-          </ul>
-
-          <h3>✂️ 编辑功能</h3>
-          <ul>
-            <li>
-              <strong>复制/剪切/粘贴</strong> - 使用工具栏按钮或快捷键
-              Ctrl+C/Ctrl+V/Ctrl+X
-            </li>
-            <li>
-              <strong>撤销/重做</strong> - 使用工具栏按钮或快捷键 Ctrl+Z/Ctrl+Y
-            </li>
-          </ul>
-
-          <h3>🎨 视图控制</h3>
-          <ul>
-            <li>
-              <strong>切换布局</strong> - 点击布局图标，选择不同的思维导图结构
-            </li>
-            <li>
-              <strong>切换主题</strong> - 点击主题图标，选择不同的颜色样式
-            </li>
-            <li>
-              <strong>适应画布</strong> - 自动调整视图以显示完整导图
-            </li>
-          </ul>
-        </div>
-      </Modal>
-    </EditorContainer>
-  );
-}
+MindMapEditor.displayName = "MindMapEditor";
 
 export default MindMapEditor;

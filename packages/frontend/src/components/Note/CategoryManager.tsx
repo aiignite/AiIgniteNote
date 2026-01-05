@@ -8,12 +8,15 @@ import {
   Tooltip,
   Popconfirm,
   App,
+  Switch,
 } from "antd";
 import {
   FolderOutlined,
   EditOutlined,
   DeleteOutlined,
   PlusOutlined,
+  GlobalOutlined,
+  LockOutlined,
 } from "@ant-design/icons";
 import styled from "styled-components";
 import { useNoteStore } from "../../store/noteStore";
@@ -76,11 +79,21 @@ function CategoryManager({ visible, onClose }: CategoryManagerProps) {
     try {
       const values = await form.validateFields();
 
+      // 只发送后端需要的字段，避免发送额外字段导致 400 错误
+      const categoryData = {
+        name: values.name,
+        icon: values.icon,
+        color: values.color,
+        sortOrder:
+          values.sortOrder !== undefined ? parseInt(values.sortOrder) : 0,
+        isPublic: values.isPublic || false,
+      };
+
       if (editingCategory) {
-        await updateCategory(editingCategory.id, values);
+        await updateCategory(editingCategory.id, categoryData);
         message.success("分类更新成功");
       } else {
-        await createCategory(values);
+        await createCategory(categoryData);
         message.success("分类创建成功");
       }
 
@@ -186,6 +199,19 @@ function CategoryManager({ visible, onClose }: CategoryManagerProps) {
             rules={[{ required: true, message: "请输入分类名称" }]}
           >
             <Input placeholder="请输入分类名称" />
+          </Form.Item>
+
+          <Form.Item
+            label="可见范围"
+            name="isPublic"
+            valuePropName="checked"
+            initialValue={false}
+            tooltip="公有: 所有人可见但只有你可以修改 | 私有: 只有你可以看到和修改"
+          >
+            <Switch
+              checkedChildren={<GlobalOutlined />}
+              unCheckedChildren={<LockOutlined />}
+            />
           </Form.Item>
         </Form>
       </Modal>

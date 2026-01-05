@@ -2,6 +2,11 @@ import { FastifyInstance } from "fastify";
 import { prisma } from "../utils/prisma.js";
 import { authenticate } from "../middleware/auth.middleware.js";
 import { AIService } from "../services/ai.service.js";
+import {
+  buildUserQuery,
+  canModify,
+  canDelete,
+} from "../utils/permission.helper.js";
 
 export default async function aiRoutes(fastify: FastifyInstance) {
   // Get conversations
@@ -22,7 +27,9 @@ export default async function aiRoutes(fastify: FastifyInstance) {
       const limit = parseInt(query.limit || "20");
       const skip = (page - 1) * limit;
 
-      const where: any = { userId: req.userId };
+      const where: any = {
+        userId: req.userId, // 对话只有用户自己能看到
+      };
 
       if (query.noteId) {
         where.noteId = query.noteId;
@@ -247,7 +254,7 @@ export default async function aiRoutes(fastify: FastifyInstance) {
     },
   );
 
-  // Get AI assistants
+  // Get AI assistants（用户自己的 + 公有的）
   fastify.get(
     "/assistants",
     {
@@ -258,7 +265,10 @@ export default async function aiRoutes(fastify: FastifyInstance) {
 
       const assistants = await prisma.aiAssistant.findMany({
         where: {
-          OR: [{ userId: req.userId }, { isBuiltIn: true }],
+          OR: [
+            { userId: req.userId }, // 用户自己的
+            { isPublic: true }, // 公有的
+          ],
         },
         orderBy: { sortOrder: "asc" },
       });
@@ -283,6 +293,8 @@ export default async function aiRoutes(fastify: FastifyInstance) {
         model: string;
         temperature?: number;
         maxTokens?: number;
+        isActive?: boolean;
+        isPublic?: boolean;
       };
 
       try {
@@ -295,8 +307,9 @@ export default async function aiRoutes(fastify: FastifyInstance) {
             model: body.model,
             temperature: body.temperature,
             maxTokens: body.maxTokens,
+            isActive: body.isActive ?? true,
+            isPublic: body.isPublic ?? false,
             userId: req.userId,
-            isBuiltIn: false,
           },
         });
 
@@ -330,19 +343,31 @@ export default async function aiRoutes(fastify: FastifyInstance) {
         temperature?: number;
         maxTokens?: number;
         isActive?: boolean;
+        isPublic?: boolean;
       };
 
       try {
-        // Find assistant first
-        const existing = await prisma.aiAssistant.findFirst({
-          where: { id, userId: req.userId, isBuiltIn: false },
+        // Find assistant first (不使用 userId 过滤，以便检查权限)
+        const existing = await prisma.aiAssistant.findUnique({
+          where: { id },
         });
 
         if (!existing) {
           reply.status(404).send({
             error: {
-              message: "Assistant not found or cannot modify built-in",
+              message: "Assistant not found",
               code: "ASSISTANT_NOT_FOUND",
+            },
+          });
+          return;
+        }
+
+        // 检查权限：只有创建者可以修改
+        if (!canModify(existing.userId, req.userId)) {
+          reply.status(403).send({
+            error: {
+              message: "You don't have permission to modify this assistant",
+              code: "FORBIDDEN",
             },
           });
           return;
@@ -363,6 +388,7 @@ export default async function aiRoutes(fastify: FastifyInstance) {
             }),
             ...(body.maxTokens !== undefined && { maxTokens: body.maxTokens }),
             ...(body.isActive !== undefined && { isActive: body.isActive }),
+            ...(body.isPublic !== undefined && { isPublic: body.isPublic }),
           },
         });
 
@@ -389,8 +415,34 @@ export default async function aiRoutes(fastify: FastifyInstance) {
       const { id } = request.params as { id: string };
 
       try {
-        await prisma.aiAssistant.deleteMany({
-          where: { id, userId: req.userId, isBuiltIn: false },
+        // Find assistant first (不使用 userId 过滤，以便检查权限)
+        const existing = await prisma.aiAssistant.findUnique({
+          where: { id },
+        });
+
+        if (!existing) {
+          reply.status(404).send({
+            error: {
+              message: "Assistant not found",
+              code: "ASSISTANT_NOT_FOUND",
+            },
+          });
+          return;
+        }
+
+        // 检查权限：只有创建者可以删除
+        if (!canDelete(existing.userId, req.userId)) {
+          reply.status(403).send({
+            error: {
+              message: "You don't have permission to delete this assistant",
+              code: "FORBIDDEN",
+            },
+          });
+          return;
+        }
+
+        await prisma.aiAssistant.delete({
+          where: { id },
         });
 
         return { message: "Assistant deleted successfully" };

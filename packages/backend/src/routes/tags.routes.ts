@@ -1,9 +1,10 @@
 import { FastifyInstance } from "fastify";
 import { prisma } from "../utils/prisma.js";
 import { authenticate } from "../middleware/auth.middleware.js";
+import { buildUserQuery, canModify, canDelete } from "../utils/permission.helper.js";
 
 export default async function tagsRoutes(fastify: FastifyInstance) {
-  // 获取用户的所有标签
+  // 获取用户的所有标签（用户自己的 + 公有的）
   fastify.get(
     "/",
     {
@@ -14,7 +15,7 @@ export default async function tagsRoutes(fastify: FastifyInstance) {
 
       try {
         const tags = await prisma.tag.findMany({
-          where: { userId: req.userId },
+          where: buildUserQuery(req.userId),
           orderBy: { name: "asc" },
           include: {
             _count: {
@@ -86,7 +87,11 @@ export default async function tagsRoutes(fastify: FastifyInstance) {
     },
     async (request, reply) => {
       const req = request as any;
-      const { name, color } = request.body as { name: string; color?: string };
+      const { name, color, isPublic } = request.body as {
+        name: string;
+        color?: string;
+        isPublic?: boolean;
+      };
 
       if (!name || name.trim().length === 0) {
         reply.code(400).send({ error: "Tag name is required" });
@@ -111,6 +116,7 @@ export default async function tagsRoutes(fastify: FastifyInstance) {
           data: {
             name: name.trim(),
             color: color || null,
+            isPublic: isPublic ?? false,
             userId: req.userId,
           },
         });
@@ -132,19 +138,36 @@ export default async function tagsRoutes(fastify: FastifyInstance) {
     async (request, reply) => {
       const req = request as any;
       const { id } = request.params as { id: string };
-      const { name, color } = request.body as { name?: string; color?: string };
+      const { name, color, isPublic } = request.body as {
+        name?: string;
+        color?: string;
+        isPublic?: boolean;
+      };
 
       try {
-        // 检查标签是否存在且属于当前用户
-        const existing = await prisma.tag.findFirst({
-          where: {
-            id,
-            userId: req.userId,
-          },
+        // 先检查权限
+        const existing = await prisma.tag.findUnique({
+          where: { id },
         });
 
         if (!existing) {
-          reply.code(404).send({ error: "Tag not found" });
+          reply.status(404).send({
+            error: {
+              message: "Tag not found",
+              code: "TAG_NOT_FOUND",
+            },
+          });
+          return;
+        }
+
+        // 检查权限：只有创建者可以修改
+        if (!canModify(existing.userId, req.userId)) {
+          reply.status(403).send({
+            error: {
+              message: "You don't have permission to modify this tag",
+              code: "FORBIDDEN",
+            },
+          });
           return;
         }
 
@@ -171,6 +194,7 @@ export default async function tagsRoutes(fastify: FastifyInstance) {
           data: {
             ...(name && { name: name.trim() }),
             ...(color !== undefined && { color }),
+            ...(isPublic !== undefined && { isPublic }),
           },
         });
 
@@ -193,16 +217,29 @@ export default async function tagsRoutes(fastify: FastifyInstance) {
       const { id } = request.params as { id: string };
 
       try {
-        // 检查标签是否存在且属于当前用户
-        const existing = await prisma.tag.findFirst({
-          where: {
-            id,
-            userId: req.userId,
-          },
+        // 先检查权限
+        const existing = await prisma.tag.findUnique({
+          where: { id },
         });
 
         if (!existing) {
-          reply.code(404).send({ error: "Tag not found" });
+          reply.status(404).send({
+            error: {
+              message: "Tag not found",
+              code: "TAG_NOT_FOUND",
+            },
+          });
+          return;
+        }
+
+        // 检查权限：只有创建者可以删除
+        if (!canDelete(existing.userId, req.userId)) {
+          reply.status(403).send({
+            error: {
+              message: "You don't have permission to delete this tag",
+              code: "FORBIDDEN",
+            },
+          });
           return;
         }
 

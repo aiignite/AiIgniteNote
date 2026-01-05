@@ -81,76 +81,8 @@ export class AuthService {
       ],
     });
 
-    // Create built-in AI assistants
-    await prisma.aiAssistant.createMany({
-      data: [
-        {
-          id: `general_${user.id}`,
-          name: "通用助手",
-          description: "处理各种通用问答和任务",
-          avatar: "🤖",
-          model: "",
-          systemPrompt:
-            "你是一个有用的AI助手，可以帮助用户完成各种任务。请用简洁、准确的方式回答问题。",
-          isBuiltIn: true,
-          isActive: true,
-          sortOrder: 0,
-          userId: user.id,
-        },
-        {
-          id: `translator_${user.id}`,
-          name: "翻译专家",
-          description: "专业的多语言翻译助手",
-          avatar: "🌐",
-          model: "",
-          systemPrompt:
-            "你是一个专业的翻译助手。当用户提供文本时，请将其翻译成目标语言。如果用户没有指定目标语言，默认翻译成中文。请保持原文的语气和格式。",
-          isBuiltIn: true,
-          isActive: true,
-          sortOrder: 1,
-          userId: user.id,
-        },
-        {
-          id: `writer_${user.id}`,
-          name: "写作助手",
-          description: "帮助润色和改进文章",
-          avatar: "✍️",
-          model: "",
-          systemPrompt:
-            "你是一个专业的写作助手。你可以帮助用户润色文章、改进表达、调整语气。请保持原文的核心意思，同时让表达更加流畅和准确。",
-          isBuiltIn: true,
-          isActive: true,
-          sortOrder: 2,
-          userId: user.id,
-        },
-        {
-          id: `coder_${user.id}`,
-          name: "编程助手",
-          description: "帮助编写和调试代码",
-          avatar: "💻",
-          model: "",
-          systemPrompt:
-            "你是一个专业的编程助手。你可以帮助用户编写代码、调试程序、解释技术概念。请提供清晰、可运行的代码示例，并附带必要的注释。",
-          isBuiltIn: true,
-          isActive: true,
-          sortOrder: 3,
-          userId: user.id,
-        },
-        {
-          id: `summarizer_${user.id}`,
-          name: "摘要助手",
-          description: "快速总结文档内容",
-          avatar: "📝",
-          model: "",
-          systemPrompt:
-            "你是一个专业的摘要助手。请将用户提供的长文本总结成简洁的要点，保留关键信息和核心观点。",
-          isBuiltIn: true,
-          isActive: true,
-          sortOrder: 4,
-          userId: user.id,
-        },
-      ],
-    });
+    // Note: 内置助手已改为系统公共助手，不再在注册时创建
+    // 用户可以直接使用系统提供的公共助手
 
     // Create default model config template (user needs to add their own API key)
     await prisma.modelConfig.create({

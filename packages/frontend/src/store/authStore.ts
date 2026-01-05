@@ -161,7 +161,13 @@ export const useAuthStore = create<AuthState>()(
       }),
       onRehydrateStorage: () => (state) => {
         console.log("auth-storage 已恢复, state:", state);
+        // 标记为已恢复
         state?._setHasHydrated(true);
+
+        // 如果有 token,设置到 apiClient
+        if (state?.token) {
+          apiClient.setTokens(state.token, state.refreshToken || "");
+        }
       },
     },
   ),

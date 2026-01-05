@@ -1,6 +1,7 @@
 import { FastifyInstance } from "fastify";
 import { prisma } from "../utils/prisma.js";
 import { authenticate } from "../middleware/auth.middleware.js";
+import { buildUserQuery, canModify, canDelete } from "../utils/permission.helper.js";
 
 export default async function noteRoutes(fastify: FastifyInstance) {
   // Get notes list
@@ -25,7 +26,7 @@ export default async function noteRoutes(fastify: FastifyInstance) {
       const skip = (page - 1) * limit;
 
       const where: any = {
-        userId: req.userId,
+        ...buildUserQuery(req.userId), // 用户自己的 + 公有的
         isDeleted: false,
       };
 
@@ -88,7 +89,10 @@ export default async function noteRoutes(fastify: FastifyInstance) {
       const { id } = request.params as { id: string };
 
       const note = await prisma.note.findFirst({
-        where: { id, userId: req.userId },
+        where: {
+          id,
+          ...buildUserQuery(req.userId), // 用户自己的 + 公有的
+        },
         include: {
           category: {
             select: { id: true, name: true, icon: true, color: true },
@@ -203,6 +207,7 @@ export default async function noteRoutes(fastify: FastifyInstance) {
         title?: string;
         content?: string;
         htmlContent?: string;
+        fileType?: string;
         categoryId?: string;
         tags?: string[];
         metadata?: any;
@@ -211,13 +216,24 @@ export default async function noteRoutes(fastify: FastifyInstance) {
 
       try {
         // Get current note
-        const currentNote = await prisma.note.findFirst({
-          where: { id, userId: req.userId },
+        const currentNote = await prisma.note.findUnique({
+          where: { id },
         });
 
         if (!currentNote) {
           reply.status(404).send({
             error: { message: "Note not found", code: "NOTE_NOT_FOUND" },
+          });
+          return;
+        }
+
+        // 检查权限：只有创建者可以修改
+        if (!canModify(currentNote.userId, req.userId)) {
+          reply.status(403).send({
+            error: {
+              message: "You don't have permission to modify this note",
+              code: "FORBIDDEN",
+            },
           });
           return;
         }
@@ -228,6 +244,7 @@ export default async function noteRoutes(fastify: FastifyInstance) {
         if (body.content !== undefined) updateData.content = body.content;
         if (body.htmlContent !== undefined)
           updateData.htmlContent = body.htmlContent;
+        if (body.fileType !== undefined) updateData.fileType = body.fileType;
         if (body.categoryId) updateData.categoryId = body.categoryId;
         if (body.tags !== undefined) updateData.tags = body.tags;
         if (body.metadata !== undefined) updateData.metadata = body.metadata;
@@ -284,8 +301,31 @@ export default async function noteRoutes(fastify: FastifyInstance) {
       const { id } = request.params as { id: string };
 
       try {
-        await prisma.note.updateMany({
-          where: { id, userId: req.userId },
+        // 先检查权限
+        const note = await prisma.note.findUnique({
+          where: { id },
+        });
+
+        if (!note) {
+          reply.status(404).send({
+            error: { message: "Note not found", code: "NOTE_NOT_FOUND" },
+          });
+          return;
+        }
+
+        // 检查权限：只有创建者可以删除
+        if (!canDelete(note.userId, req.userId)) {
+          reply.status(403).send({
+            error: {
+              message: "You don't have permission to delete this note",
+              code: "FORBIDDEN",
+            },
+          });
+          return;
+        }
+
+        await prisma.note.update({
+          where: { id },
           data: {
             isDeleted: true,
             deletedAt: new Date(),
@@ -315,15 +355,38 @@ export default async function noteRoutes(fastify: FastifyInstance) {
       const { id } = request.params as { id: string };
 
       try {
-        const note = await prisma.note.updateMany({
-          where: { id, userId: req.userId },
+        // 先检查权限
+        const existingNote = await prisma.note.findUnique({
+          where: { id },
+        });
+
+        if (!existingNote) {
+          reply.status(404).send({
+            error: { message: "Note not found", code: "NOTE_NOT_FOUND" },
+          });
+          return;
+        }
+
+        // 检查权限：只有创建者可以恢复
+        if (!canModify(existingNote.userId, req.userId)) {
+          reply.status(403).send({
+            error: {
+              message: "You don't have permission to restore this note",
+              code: "FORBIDDEN",
+            },
+          });
+          return;
+        }
+
+        const note = await prisma.note.update({
+          where: { id },
           data: {
             isDeleted: false,
             deletedAt: null,
           },
         });
 
-        if (note.count === 0) {
+        if (!note) {
           reply.status(404).send({
             error: { message: "Note not found", code: "NOTE_NOT_FOUND" },
           });

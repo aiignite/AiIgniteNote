@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useSearchParams, useParams } from "react-router-dom";
 import {
   Card,
   Button,
@@ -15,6 +16,8 @@ import {
   App,
   Divider,
   Select,
+  Row,
+  Col,
 } from "antd";
 import {
   RobotOutlined,
@@ -24,6 +27,9 @@ import {
   CheckCircleOutlined,
   BarsOutlined,
   AppstoreOutlined,
+  CopyOutlined,
+  GlobalOutlined,
+  LockOutlined,
 } from "@ant-design/icons";
 import styled, { keyframes } from "styled-components";
 import {
@@ -36,6 +42,9 @@ import {
 } from "../../../styles/design-tokens";
 import { useAIStore } from "../../../store/aiStore";
 import { useModelStore } from "../../../store/modelStore";
+import { useAuthStore } from "../../../store/authStore";
+import { aiApi } from "../../../lib/api/ai";
+import { db } from "../../../db";
 
 // ============================================
 // 动画
@@ -254,7 +263,8 @@ interface AIAssistant {
   model: string;
   temperature?: number;
   maxTokens?: number;
-  isBuiltIn: boolean;
+  isPublic?: boolean;
+  userId?: string;
   isActive: boolean;
 }
 
@@ -263,6 +273,7 @@ interface AIAssistant {
 // ============================================
 
 export default function AiAssistants() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [assistants, setAssistants] = useState<AIAssistant[]>([]);
   const [loading, setLoading] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
@@ -273,6 +284,7 @@ export default function AiAssistants() {
   const [form] = Form.useForm();
   const { message } = App.useApp();
   const { configs } = useModelStore();
+  const { user } = useAuthStore();
   const {
     assistants: dbAssistants,
     loadAssistants,
@@ -284,6 +296,23 @@ export default function AiAssistants() {
   useEffect(() => {
     loadAssistantsData();
   }, [loadAssistants]);
+
+  // 处理 URL 参数，打开编辑弹窗
+  useEffect(() => {
+    const editId = searchParams.get("edit");
+    if (editId && assistants.length > 0) {
+      const assistant = assistants.find((a) => a.id === editId);
+      if (assistant) {
+        handleEdit(assistant);
+        // 清除 URL 参数
+        setSearchParams((params) => {
+          const newParams = new URLSearchParams(params);
+          newParams.delete("edit");
+          return newParams;
+        });
+      }
+    }
+  }, [searchParams, assistants]);
 
   const loadAssistantsData = async () => {
     setLoading(true);
@@ -310,18 +339,78 @@ export default function AiAssistants() {
     setModalVisible(true);
   };
 
-  const handleEdit = (assistant: AIAssistant) => {
-    setEditingAssistant(assistant);
-    form.setFieldsValue(assistant);
-    setModalVisible(true);
+  const handleEdit = async (assistant: AIAssistant) => {
+    try {
+      // 在编辑前,检查是否有待同步的数据
+      const dbAssistant = await db.aiAssistants.get(assistant.id);
+
+      if (dbAssistant && dbAssistant._pendingSync) {
+        console.log("[AiAssistants] 检测到待同步数据,正在同步到后端...");
+        message.loading("正在同步数据...");
+
+        try {
+          // 同步到后端
+          const response = await aiApi.updateAssistant(assistant.id, {
+            name: dbAssistant.name,
+            description: dbAssistant.description,
+            systemPrompt: dbAssistant.systemPrompt,
+            avatar: dbAssistant.avatar,
+            model: dbAssistant.model,
+            temperature: dbAssistant.temperature,
+            maxTokens: dbAssistant.maxTokens,
+            isActive: dbAssistant.isActive,
+            isPublic: dbAssistant.isPublic,
+          });
+
+          // 清除待同步标记
+          await db.aiAssistants.update(assistant.id, {
+            _pendingSync: undefined,
+          });
+
+          message.success("数据同步成功");
+        } catch (syncError) {
+          console.warn("[AiAssistants] 同步失败,但允许继续编辑:", syncError);
+          message.warning("数据同步失败,将以离线模式编辑");
+        }
+      }
+
+      setEditingAssistant(assistant);
+      form.setFieldsValue(assistant);
+      setModalVisible(true);
+    } catch (error) {
+      console.error("[AiAssistants] 准备编辑失败:", error);
+      message.error("准备编辑失败");
+    }
+  };
+
+  const handleCopy = async (assistant: AIAssistant) => {
+    try {
+      const newAssistant = await createAssistant({
+        name: `${assistant.name} (副本)`,
+        description: assistant.description,
+        systemPrompt: assistant.systemPrompt,
+        avatar: assistant.avatar,
+        model: assistant.model,
+        temperature: assistant.temperature,
+        maxTokens: assistant.maxTokens,
+        isActive: true,
+      });
+      await loadAssistantsData();
+      message.success("已创建副本");
+    } catch (error: any) {
+      console.error("复制助手失败:", error);
+      message.error(error.message || "复制失败");
+    }
   };
 
   const handleDelete = async (id: string) => {
     try {
-      // 只能删除自定义助手
+      // 只能删除自己创建的助手
       const assistant = assistants.find((a) => a.id === id);
-      if (assistant?.isBuiltIn) {
-        message.warning("内置助手不能删除");
+      const { user } = useAuthStore.getState();
+
+      if (assistant?.userId !== user?.id) {
+        message.warning("不能删除公共助手");
         return;
       }
 
@@ -346,7 +435,7 @@ export default function AiAssistants() {
         temperature: values.temperature,
         maxTokens: values.maxTokens,
         isActive: values.isActive ?? true,
-        isBuiltIn: false,
+        isPublic: values.isPublic || false,
       };
 
       if (editingAssistant) {
@@ -379,6 +468,15 @@ export default function AiAssistants() {
         <StyledCard
           actions={[
             <Button
+              key="copy"
+              type="text"
+              size="small"
+              icon={<CopyOutlined />}
+              onClick={() => handleCopy(assistant)}
+            >
+              复制
+            </Button>,
+            <Button
               key="edit"
               type="text"
               size="small"
@@ -387,7 +485,7 @@ export default function AiAssistants() {
             >
               编辑
             </Button>,
-            !assistant.isBuiltIn && (
+            assistant.userId === user?.id && (
               <Popconfirm
                 key="delete"
                 title="确定删除这个助手吗?"
@@ -413,9 +511,9 @@ export default function AiAssistants() {
           <AssistantTitle>{assistant.name}</AssistantTitle>
           <AssistantDescription>{assistant.description}</AssistantDescription>
           <Space size={4} wrap>
-            {assistant.isBuiltIn && (
+            {assistant.isPublic && assistant.userId !== user?.id && (
               <StyledTag color="blue" icon={<CheckCircleOutlined />}>
-                内置
+                公共
               </StyledTag>
             )}
             {assistant.isActive && (
@@ -443,9 +541,9 @@ export default function AiAssistants() {
         <ListItemContent>
           <ListItemTitle>{assistant.name}</ListItemTitle>
           <ListItemMeta>
-            {assistant.isBuiltIn && (
+            {assistant.isPublic && assistant.userId !== user?.id && (
               <StyledTag color="blue" icon={<CheckCircleOutlined />}>
-                内置
+                公共
               </StyledTag>
             )}
             {assistant.isActive && (
@@ -460,7 +558,14 @@ export default function AiAssistants() {
           </PromptPreview>
         </ListItemContent>
         <ListItemActions>
-          {!assistant.isBuiltIn && (
+          <Button
+            size="small"
+            icon={<CopyOutlined />}
+            onClick={() => handleCopy(assistant)}
+          >
+            复制
+          </Button>
+          {assistant.userId === user?.id && (
             <Popconfirm
               title="确定删除这个助手吗?"
               onConfirm={() => handleDelete(assistant.id)}
@@ -529,21 +634,74 @@ export default function AiAssistants() {
       )}
 
       <Modal
-        title={editingAssistant ? "编辑助手" : "新建助手"}
+        title={
+          <div>
+            {editingAssistant ? "编辑助手" : "新建助手"}
+            {editingAssistant?.isPublic &&
+              editingAssistant?.userId !== user?.id && (
+                <Tag color="blue" style={{ marginLeft: 8 }}>
+                  公共助手
+                </Tag>
+              )}
+          </div>
+        }
         open={modalVisible}
         onCancel={() => setModalVisible(false)}
         footer={null}
-        width={600}
+        width={640}
       >
+        {editingAssistant?.isPublic &&
+          editingAssistant?.userId !== user?.id && (
+            <div
+              style={{
+                marginBottom: 16,
+                padding: 12,
+                background: "#fff7e6",
+                border: "1px solid #ffd591",
+                borderRadius: 4,
+                fontSize: 13,
+                color: "#d46b08",
+              }}
+            >
+              ⚠️ 您正在编辑公共助手，修改将<b>仅保存在本地浏览器</b>
+              中，不会同步到服务器。刷新页面或更换设备后，修改会恢复为默认设置。
+              <br />
+              <br />
+              💡 <b>建议</b>
+              ：如需长期使用自定义配置，请点击"复制"创建一个自定义副本。
+              <Button
+                type="primary"
+                size="small"
+                style={{ marginTop: 8 }}
+                onClick={() => {
+                  handleCopy(editingAssistant);
+                  setModalVisible(false);
+                }}
+              >
+                复制为自定义助手
+              </Button>
+            </div>
+          )}
         <Form form={form} layout="vertical" onFinish={handleSubmit}>
-          <Form.Item
-            label="助手名称"
-            name="name"
-            rules={[{ required: true, message: "请输入助手名称" }]}
-          >
-            <Input placeholder="例如: 写作助手" />
-          </Form.Item>
+          {/* 第一行: 助手名称 + 图标 */}
+          <Row gutter={16}>
+            <Col span={16}>
+              <Form.Item
+                label="助手名称"
+                name="name"
+                rules={[{ required: true, message: "请输入助手名称" }]}
+              >
+                <Input placeholder="例如: 写作助手" />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item label="图标" name="avatar">
+                <Input placeholder="✍️" />
+              </Form.Item>
+            </Col>
+          </Row>
 
+          {/* 第二行: 描述 (占满整行) */}
           <Form.Item
             label="描述"
             name="description"
@@ -552,10 +710,80 @@ export default function AiAssistants() {
             <Input.TextArea rows={2} placeholder="简要描述这个助手的用途" />
           </Form.Item>
 
-          <Form.Item label="图标" name="avatar">
-            <Input placeholder="例如: ✍️" />
-          </Form.Item>
+          {/* 第三行: 使用模型 + 是否启用 */}
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item
+                label="使用模型"
+                name="model"
+                rules={[{ required: true, message: "请选择模型" }]}
+                initialValue=""
+              >
+                <Select placeholder="选择模型">
+                  <Select.Option value="">默认模型</Select.Option>
+                  {configs
+                    .filter((c) => c.enabled)
+                    .map((config) => (
+                      <Select.Option key={config.id} value={config.id}>
+                        {config.name} ({config.model})
+                      </Select.Option>
+                    ))}
+                </Select>
+              </Form.Item>
+            </Col>
+            <Col span={6}>
+              <Form.Item
+                label="是否启用"
+                name="isActive"
+                valuePropName="checked"
+                initialValue={true}
+              >
+                <Switch />
+              </Form.Item>
+            </Col>
+            <Col span={6}>
+              <Form.Item
+                label="可见范围"
+                name="isPublic"
+                valuePropName="checked"
+                initialValue={false}
+                tooltip="公有: 所有人可见但只有你可以修改 | 私有: 只有你可以看到和修改"
+              >
+                <Switch
+                  checkedChildren={<GlobalOutlined />}
+                  unCheckedChildren={<LockOutlined />}
+                />
+              </Form.Item>
+            </Col>
+          </Row>
 
+          {/* 第四行: 温度 + 最大Token数 */}
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item label="温度" name="temperature">
+                <InputNumber
+                  min={0}
+                  max={2}
+                  step={0.1}
+                  style={{ width: "100%" }}
+                  placeholder="0.7"
+                />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item label="最大Token数" name="maxTokens">
+                <InputNumber
+                  min={100}
+                  max={8000}
+                  step={100}
+                  style={{ width: "100%" }}
+                  placeholder="2000"
+                />
+              </Form.Item>
+            </Col>
+          </Row>
+
+          {/* 第五行: 系统提示词 (占满整行) */}
           <Form.Item
             label="系统提示词"
             name="systemPrompt"
@@ -566,53 +794,6 @@ export default function AiAssistants() {
               rows={5}
               placeholder="你是一个专业的写作助手，可以帮助用户润色文章、改进表达..."
             />
-          </Form.Item>
-
-          <Form.Item
-            label="使用模型"
-            name="model"
-            rules={[{ required: true, message: "请选择模型" }]}
-            initialValue=""
-          >
-            <Select placeholder="选择模型">
-              <Select.Option value="">默认模型</Select.Option>
-              {configs
-                .filter((c) => c.enabled)
-                .map((config) => (
-                  <Select.Option key={config.id} value={config.id}>
-                    {config.name} ({config.model})
-                  </Select.Option>
-                ))}
-            </Select>
-          </Form.Item>
-
-          <Form.Item label="温度 (Temperature)" name="temperature">
-            <InputNumber
-              min={0}
-              max={2}
-              step={0.1}
-              style={{ width: "100%" }}
-              placeholder="0.7"
-            />
-          </Form.Item>
-
-          <Form.Item label="最大Token数" name="maxTokens">
-            <InputNumber
-              min={100}
-              max={8000}
-              step={100}
-              style={{ width: "100%" }}
-              placeholder="2000"
-            />
-          </Form.Item>
-
-          <Form.Item
-            label="是否启用"
-            name="isActive"
-            valuePropName="checked"
-            initialValue={true}
-          >
-            <Switch />
           </Form.Item>
 
           <Divider />
@@ -628,7 +809,7 @@ export default function AiAssistants() {
             </ul>
           </div>
 
-          <Form.Item style={{ marginTop: 16 }}>
+          <Form.Item style={{ marginTop: 16, marginBottom: 0 }}>
             <Button type="primary" htmlType="submit" loading={loading} block>
               {editingAssistant ? "更新" : "创建"}
             </Button>

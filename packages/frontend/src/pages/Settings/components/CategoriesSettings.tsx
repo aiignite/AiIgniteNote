@@ -161,9 +161,13 @@ function CategoriesSettings() {
           ? values.color
           : values.color?.toHexString?.() || "#1890ff";
 
+      // 只发送后端需要的字段，避免发送额外字段导致 400 错误
       const categoryData = {
-        ...values,
+        name: values.name,
+        icon: values.icon,
         color: colorValue,
+        sortOrder:
+          values.sortOrder !== undefined ? parseInt(values.sortOrder) : 0,
       };
 
       if (editingCategory) {

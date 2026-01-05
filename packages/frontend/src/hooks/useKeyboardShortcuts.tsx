@@ -64,20 +64,24 @@ export function useKeyboardShortcuts(
 
 // 全局快捷键 Hook
 export function useGlobalKeyboardShortcuts() {
-  const { createNote, currentNote, setCurrentNote } = useNoteStore();
+  const { createNote, currentNote, setCurrentNote, lastUsedFileType } = useNoteStore();
   const { createConversation } = useAIStore();
 
   const handleNewNote = useCallback(async () => {
-    // 创建新笔记
+    // 从 URL 中获取当前选中的分类 ID
+    const match = window.location.pathname.match(/\/category\/([^/]+)/);
+    const currentCategoryId = match ? match[1] : "";
+
+    // 创建新笔记，使用最后使用的文件类型
     const newNote = await createNote({
       title: "新建笔记",
       content: "",
       htmlContent: "",
       tags: [],
-      category: "", // 使用空字符串，后端会自动分配到"未分类"
+      category: currentCategoryId, // 使用当前选中的分类，如果没有则使用空字符串
       isDeleted: false,
       isFavorite: false,
-      fileType: "markdown" as any,
+      fileType: lastUsedFileType as any,
     });
 
     // 设置为当前笔记并导航
@@ -87,7 +91,7 @@ export function useGlobalKeyboardShortcuts() {
     window.location.hash = `/notes/${newNote.id}`;
 
     message.success("已创建新笔记");
-  }, [createNote, setCurrentNote]);
+  }, [createNote, setCurrentNote, lastUsedFileType]);
 
   const handleSaveNote = useCallback(() => {
     // 触发手动保存

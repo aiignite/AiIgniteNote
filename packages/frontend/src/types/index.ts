@@ -84,6 +84,10 @@ export interface ModelConfig {
   topP: number;
   enabled: boolean;
   isDefault: boolean;
+  isPublic?: boolean; // 是否公有（其他人可见但不可编辑）
+  userId?: string;
+  // 同步相关字段（仅本地使用）
+  _pendingSync?: boolean;
 }
 
 export interface ModelUsageLog {

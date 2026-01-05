@@ -288,6 +288,9 @@ function NoteEditor({ noteId }: NoteEditorProps) {
   // 当前文件类型状态
   const [fileType, setFileType] = useState<NoteFileType>(NoteFileType.MARKDOWN);
 
+  // 标记笔记是否已加载完成
+  const [isNoteLoaded, setIsNoteLoaded] = useState(false);
+
   // 编辑器控制状态 - 使用全局全屏状态
   const { isFullscreen, setFullscreen } = useFullscreenStore();
 
@@ -306,6 +309,9 @@ function NoteEditor({ noteId }: NoteEditorProps) {
   // 初始化编辑器
   useEffect(() => {
     const loadNote = async () => {
+      // 重置加载状态
+      setIsNoteLoaded(false);
+
       // 加载所有标签
       await loadTags();
 
@@ -322,6 +328,9 @@ function NoteEditor({ noteId }: NoteEditorProps) {
             setMetadata(note.metadata);
             // 兼容旧数据：没有 fileType 的默认为 markdown
             setFileType(note.fileType || NoteFileType.MARKDOWN);
+
+            // 标记笔记加载完成
+            setIsNoteLoaded(true);
           }
         } catch (error) {
           console.error("Failed to load note:", error);
@@ -333,10 +342,37 @@ function NoteEditor({ noteId }: NoteEditorProps) {
         setTagIds([]);
         setMetadata(undefined);
         setFileType(NoteFileType.MARKDOWN);
+        setIsNoteLoaded(true);
       }
     };
     loadNote();
   }, [noteId, setCurrentNote, loadTags]);
+
+  // 自动保存函数 - 使用 useCallback 避免重复创建
+  const handleAutoSave = useCallback(async () => {
+    if (!noteId) return;
+    setSaving(true);
+    try {
+      // 保存标签关联到 IndexedDB
+      await db.setNoteTags(noteId, tagIds);
+
+      // 同时更新 notes 表的 tags 数组（保持兼容性）
+      const tagNames = allTags
+        .filter((t) => tagIds.includes(t.id))
+        .map((t) => t.name);
+
+      await updateNote(noteId, {
+        title,
+        content,
+        tags: tagNames,
+        fileType,
+        metadata,
+      });
+    } catch (error) {
+      console.error("Save failed:", error);
+    }
+    setSaving(false);
+  }, [noteId, tagIds, allTags, title, content, fileType, metadata, updateNote]);
 
   // 自动保存
   const { saveStatus, manualSave } = useAutoSave({
@@ -344,30 +380,8 @@ function NoteEditor({ noteId }: NoteEditorProps) {
     title,
     content,
     tags: tagIds,
-    onSave: async () => {
-      if (!noteId) return;
-      setSaving(true);
-      try {
-        // 保存标签关联到 IndexedDB
-        await db.setNoteTags(noteId, tagIds);
-
-        // 同时更新 notes 表的 tags 数组（保持兼容性）
-        const tagNames = allTags
-          .filter((t) => tagIds.includes(t.id))
-          .map((t) => t.name);
-
-        await updateNote(noteId, {
-          title,
-          content,
-          tags: tagNames,
-          fileType,
-          metadata,
-        });
-      } catch (error) {
-        console.error("Save failed:", error);
-      }
-      setSaving(false);
-    },
+    onSave: handleAutoSave,
+    enabled: isNoteLoaded, // 只有在笔记加载完成后才启用自动保存
   });
 
   // 内容变更处理（统一接口）

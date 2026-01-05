@@ -1,6 +1,7 @@
 import { AIMessage, AIConversation } from "../../types";
 import { aiApi, ChatMessage } from "./ai";
 import { isMindMapNote, buildMindMapContext } from "./mindmapContextBuilder";
+import { isDrawIONote, buildDrawIOContext } from "./drawioContextBuilder";
 
 // ============================================
 // 配置常量
@@ -226,8 +227,10 @@ export async function buildMessagesForAI(
   console.log("[ContextManager] conversation.noteId:", conversation.noteId);
 
   const isMindMap = await isMindMapNote(conversation.noteId);
+  const isDrawIO = await isDrawIONote(conversation.noteId);
 
   console.log("[ContextManager] isMindMap 检测结果:", isMindMap);
+  console.log("[ContextManager] isDrawIO 检测结果:", isDrawIO);
 
   if (isMindMap && conversation.noteId) {
     console.log("[ContextManager] ✅ 检测到思维导图笔记,使用专用上下文构建");
@@ -259,6 +262,45 @@ export async function buildMessagesForAI(
     });
 
     return result.messages;
+  }
+
+  if (isDrawIO && conversation.noteId) {
+    console.log("[ContextManager] ✅ 检测到 DrawIO 笔记,使用专用上下文构建");
+
+    // 使用传入的当前用户消息，或从对话历史中获取
+    const userMessage =
+      config.currentUserMessage ||
+      (() => {
+        const lastMessage =
+          conversation.messages[conversation.messages.length - 1];
+        return lastMessage?.role === "user" ? lastMessage.content : "";
+      })();
+
+    console.log("[ContextManager] 使用的用户消息:", userMessage);
+
+    const result = await buildDrawIOContext(conversation.noteId);
+
+    if (result.hasContext && result.contextPrompt) {
+      // 构建包含 DrawIO 上下文的消息
+      const messages: ChatMessage[] = [
+        {
+          role: "system",
+          content: `${systemPrompt}\n\n${result.contextPrompt}`,
+        },
+        ...conversation.messages.slice(-6), // 只保留最近6条历史消息
+        {
+          role: "user",
+          content: userMessage,
+        },
+      ];
+
+      console.log("[ContextManager] DrawIO 上下文构建完成:", {
+        hasContext: true,
+        messagesCount: messages.length,
+      });
+
+      return messages;
+    }
   }
 
   // 原有的普通对话逻辑

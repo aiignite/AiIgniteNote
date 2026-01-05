@@ -20,11 +20,14 @@ export interface LocalAIAssistant {
   model: string; // 模型配置 ID，空字符串表示使用默认模型
   temperature?: number;
   maxTokens?: number;
-  isBuiltIn?: boolean;
+  isPublic?: boolean; // 是否公有（其他人可见但不可编辑）
   isActive?: boolean;
   sortOrder?: number;
+  userId?: string;
   createdAt: number;
   updatedAt: number;
+  // 同步相关字段（仅本地使用）
+  _pendingSync?: boolean;
 }
 
 export interface LocalNote {
@@ -36,6 +39,8 @@ export interface LocalNote {
   category: string; // 本地存储的是分类名称或ID
   isDeleted: boolean;
   isFavorite: boolean;
+  isPublic?: boolean; // 是否公有（其他人可见但不可编辑）
+  userId?: string;
   createdAt: number;
   updatedAt: number;
   version: number;
@@ -69,6 +74,8 @@ export interface LocalCategory {
   name: string;
   icon?: string;
   color?: string;
+  isPublic?: boolean; // 是否公有（其他人可见但不可编辑）
+  userId?: string;
   createdAt: number;
   sortOrder?: number;
   // 同步相关字段（仅本地使用）
@@ -81,6 +88,8 @@ export interface LocalTag {
   id: string;
   name: string;
   color?: string;
+  isPublic?: boolean; // 是否公有（其他人可见但不可编辑）
+  userId?: string;
   createdAt: number;
   updatedAt: number;
   // 同步相关字段（仅本地使用）
@@ -99,6 +108,8 @@ export function toLocalNote(serverNote: any): LocalNote {
     category: serverNote.categoryId || serverNote.category?.id || "",
     isDeleted: serverNote.isDeleted || false,
     isFavorite: serverNote.isFavorite || false,
+    isPublic: serverNote.isPublic || false,
+    userId: serverNote.userId,
     createdAt: new Date(serverNote.createdAt).getTime(),
     updatedAt: new Date(serverNote.updatedAt).getTime(),
     version: serverNote.version || 1,
@@ -121,6 +132,8 @@ export function toServerNote(localNote: LocalNote): any {
     categoryId: localNote.category,
     isDeleted: localNote.isDeleted,
     isFavorite: localNote.isFavorite,
+    isPublic: localNote.isPublic || false,
+    userId: localNote.userId,
     version: localNote.version,
     fileType: localNote.fileType,
     metadata: localNote.metadata,

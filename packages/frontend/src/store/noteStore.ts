@@ -15,6 +15,7 @@ interface NoteStore {
   isOnline: boolean;
   syncStatus: SyncStatus;
   lastSyncTime: number | null;
+  lastUsedFileType: string; // 记住用户最后使用的文件类型
 
   // Actions
   loadNotes: () => Promise<void>;
@@ -26,6 +27,7 @@ interface NoteStore {
   deleteNote: (id: string) => Promise<void>;
   restoreNote: (id: string) => Promise<void>;
   setCurrentNote: (note: LocalNote | null) => void;
+  setLastUsedFileType: (fileType: string) => void; // 新增：设置最后使用的文件类型
   searchNotes: (keyword: string) => Promise<void>;
   setSearchFilter: (filter: SearchFilter) => void;
   toggleFavorite: (id: string) => Promise<void>;
@@ -60,6 +62,7 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
   isOnline: navigator.onLine,
   syncStatus: "idle" as SyncStatus,
   lastSyncTime: null,
+  lastUsedFileType: localStorage.getItem("lastUsedFileType") || "markdown", // 从 localStorage 读取，默认为 markdown
 
   // 检查在线状态
   checkOnlineStatus: () => {
@@ -148,33 +151,43 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
       const { isOnline } = get();
 
       if (isOnline) {
-        // 在线状态：从后端API获取最新数据
+        // 在线状态：从后端API获取最新数据（PostgreSQL 为准）
         try {
           const response = await notesApi.getCategories();
           const remoteCategories = response.data || [];
 
-          // 同步到 IndexedDB
-          for (const category of remoteCategories) {
-            const localCategory = {
-              id: category.id,
-              name: category.name,
-              icon: category.icon,
-              color: category.color,
-              sortOrder: category.sortOrder,
-              createdAt: new Date(category.createdAt).getTime(),
-            };
-            await db.categories.put(localCategory);
-          }
+          // 清空 IndexedDB 中的所有分类
+          await db.categories.clear();
 
-          const categories = await db.categories.toArray();
-          set({ categories });
+          // 将后端分类同步到 IndexedDB 和 store
+          const syncedCategories = await Promise.all(
+            remoteCategories.map(async (category) => {
+              const localCategory = {
+                id: category.id,
+                name: category.name,
+                icon: category.icon,
+                color: category.color,
+                sortOrder: category.sortOrder,
+                createdAt: new Date(category.createdAt).getTime(),
+                _synced: true, // 标记为已同步
+              };
+              await db.categories.put(localCategory);
+              return localCategory;
+            }),
+          );
+
+          set({ categories: syncedCategories });
+          console.log(
+            `[loadCategories] 已从 PostgreSQL 同步 ${remoteCategories.length} 个分类`,
+          );
           return;
         } catch (apiError) {
-          console.warn("Failed to load categories from backend:", apiError);
+          console.error("Failed to load categories from backend:", apiError);
+          throw apiError;
         }
       }
 
-      // 离线状态或API失败：从 IndexedDB 加载
+      // 离线状态：从 IndexedDB 加载
       const categories = await db.categories.toArray();
       set({ categories });
     } catch (error) {
@@ -199,6 +212,7 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
             categoryId: noteData.category,
             tags: noteData.tags,
             metadata: noteData.metadata,
+            isPublic: noteData.isPublic ?? false,
           };
 
           console.log(
@@ -303,6 +317,7 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
               categoryId: updates.category || currentNote.category,
               tags: updates.tags || currentNote.tags,
               metadata: updates.metadata || currentNote.metadata,
+              isPublic: updates.isPublic ?? currentNote.isPublic ?? false,
             };
 
             console.log(
@@ -341,10 +356,12 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
             title: updates.title,
             content: updates.content,
             htmlContent: updates.htmlContent,
+            fileType: updates.fileType,
             categoryId: updates.category,
             tags: updates.tags,
             metadata: updates.metadata,
             isFavorite: updates.isFavorite,
+            isPublic: updates.isPublic,
           });
 
           // 同步成功，更新本地状态
@@ -353,7 +370,64 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
             pendingSync: false,
             lastSyncError: undefined,
           });
-        } catch (apiError) {
+        } catch (apiError: any) {
+          // 特殊处理 404 错误：笔记在服务器上不存在，需要创建
+          if (apiError.response?.status === 404) {
+            console.warn(
+              `[updateNote] 笔记 ${id} 在服务器上不存在 (404)，降级为创建操作`,
+            );
+
+            try {
+              const requestData = {
+                title: updates.title || currentNote.title,
+                content: updates.content ?? currentNote.content,
+                htmlContent: updates.htmlContent ?? currentNote.htmlContent,
+                fileType: currentNote.fileType,
+                categoryId: updates.category || currentNote.category,
+                tags: updates.tags || currentNote.tags,
+                metadata: updates.metadata || currentNote.metadata,
+              };
+
+              const response = await notesApi.createNote(requestData);
+
+              // 更新本地笔记的 ID 为后端返回的 ID
+              const syncedNote = {
+                ...currentNote,
+                ...updateData,
+                id: response.data.id,
+                synced: true,
+                pendingSync: false,
+                needsServerId: false,
+                lastSyncError: undefined,
+              };
+              await db.notes.put(syncedNote);
+              await db.notes.delete(id); // 删除旧 ID 记录
+
+              // 更新 store 状态
+              set((state) => ({
+                notes: state.notes
+                  .filter((n) => n.id !== id)
+                  .concat(syncedNote),
+                currentNote:
+                  state.currentNote?.id === id ? syncedNote : state.currentNote,
+              }));
+
+              console.log(
+                `[updateNote] ✅ 成功创建笔记: ${id} -> ${response.data.id}`,
+              );
+              return; // 提前返回，不执行后续的 set 操作
+            } catch (createError) {
+              console.error("[updateNote] 创建笔记失败:", createError);
+              await db.updateNote(id, {
+                lastSyncError:
+                  createError instanceof Error
+                    ? createError.message
+                    : String(createError),
+              });
+              return; // 提前返回
+            }
+          }
+
           console.warn("[updateNote] 同步到后端失败，标记为待同步:", apiError);
           // 保持 pendingSync: true 状态，以便后续重试
           await db.updateNote(id, {
@@ -434,6 +508,12 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
     set({ currentNote: note });
   },
 
+  setLastUsedFileType: (fileType: string) => {
+    set({ lastUsedFileType: fileType });
+    // 保存到 localStorage 以便刷新后保持
+    localStorage.setItem("lastUsedFileType", fileType);
+  },
+
   searchNotes: async (keyword) => {
     set({ isLoading: true });
     try {
@@ -506,13 +586,14 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
       const { isOnline } = get();
 
       if (isOnline) {
-        // 在线状态：优先调用后端 API 创建
+        // 在线状态：必须先调用后端 API 创建（PostgreSQL 为准）
         try {
           const response = await notesApi.createCategory({
             name: categoryData.name,
             icon: categoryData.icon,
             color: categoryData.color,
             sortOrder: categoryData.sortOrder,
+            isPublic: categoryData.isPublic ?? false,
           });
 
           const newCategory: LocalCategory = {
@@ -521,33 +602,29 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
             icon: response.data.icon,
             color: response.data.color,
             sortOrder: response.data.sortOrder,
+            isPublic: response.data.isPublic ?? false,
             createdAt: new Date(response.data.createdAt).getTime(),
+            _synced: true, // 标记为已同步
           };
 
           // 同步到 IndexedDB
-          await db.categories.add(newCategory);
+          await db.categories.add(newCategory as any);
 
           // 更新状态
           set((state) => ({ categories: [...state.categories, newCategory] }));
+          console.log(
+            "[createCategory] 已在 PostgreSQL 创建分类:",
+            newCategory.name,
+          );
           return newCategory;
         } catch (apiError) {
-          console.warn(
-            "Failed to create category on backend, using local only:",
-            apiError,
-          );
-          // 后端调用失败，回退到只存储到 IndexedDB
+          console.error("[createCategory] 后端创建失败:", apiError);
+          throw new Error("创建分类失败，请检查网络连接");
         }
+      } else {
+        // 离线状态：提示用户
+        throw new Error("离线状态下无法创建分类，请连接网络后重试");
       }
-
-      // 离线状态或后端失败：只保存到 IndexedDB
-      const category = await db.createCategory(categoryData);
-
-      // 标记为待同步
-      await db.categories.update(category.id, { _pendingSync: true } as any);
-
-      set((state) => ({ categories: [...state.categories, category] }));
-      console.warn("Category saved locally (pending sync when online)");
-      return category;
     } catch (error) {
       console.error("Failed to create category:", error);
       throw error;
@@ -556,29 +633,37 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
 
   updateCategory: async (id, updates) => {
     try {
-      const { isOnline } = get();
+      const { isOnline, categories } = get();
+
+      // 检查分类是否已同步到后端（有 _synced 标记）
+      const category = categories.find((c) => c.id === id);
+      if (!category) {
+        throw new Error("分类不存在");
+      }
+
+      const isSynced = (category as any)._synced === true;
+
+      if (!isSynced) {
+        throw new Error("只能修改已同步到服务器的分类");
+      }
 
       if (isOnline) {
-        // 在线状态：优先调用后端 API 更新
+        // 在线状态：必须先调用后端 API 更新（PostgreSQL 为准）
         try {
           await notesApi.updateCategory(id, updates);
           // 同步到 IndexedDB
           await db.updateCategory(id, updates);
-        } catch (apiError) {
-          console.warn(
-            "Failed to update category on backend, updating local only:",
-            apiError,
+          console.log(
+            "[updateCategory] 已在 PostgreSQL 更新分类:",
+            updates.name,
           );
-          // 后端调用失败，只更新 IndexedDB 并标记待同步
-          await db.updateCategory(id, {
-            ...updates,
-            _pendingSync: true,
-          } as any);
+        } catch (apiError) {
+          console.error("[updateCategory] 后端更新失败:", apiError);
+          throw new Error("更新分类失败，请检查网络连接");
         }
       } else {
-        // 离线状态：只更新 IndexedDB 并标记待同步
-        await db.updateCategory(id, { ...updates, _pendingSync: true } as any);
-        console.warn("Category updated locally (pending sync when online)");
+        // 离线状态：提示用户
+        throw new Error("离线状态下无法更新分类，请连接网络后重试");
       }
 
       set((state) => ({
@@ -594,42 +679,37 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
 
   deleteCategory: async (id) => {
     try {
-      const { isOnline } = get();
+      const { isOnline, categories } = get();
+
+      // 检查分类是否已同步到后端（有 _synced 标记）
+      const category = categories.find((c) => c.id === id);
+      if (!category) {
+        throw new Error("分类不存在");
+      }
+
+      const isSynced = (category as any)._synced === true;
+
+      if (!isSynced) {
+        throw new Error("只能删除已同步到服务器的分类");
+      }
 
       if (isOnline) {
-        // 在线状态：优先调用后端 API 删除
+        // 在线状态：必须先调用后端 API 删除（PostgreSQL 为准）
         try {
           await notesApi.deleteCategory(id);
           // 从 IndexedDB 删除
           await db.deleteCategory(id);
-        } catch (apiError) {
-          console.warn(
-            "Failed to delete category on backend, deleting local only:",
-            apiError,
+          console.log(
+            "[deleteCategory] 已在 PostgreSQL 删除分类:",
+            category.name,
           );
-          // 后端调用失败，只从 IndexedDB 删除并标记
-          const existing = await db.categories.get(id);
-          if (existing) {
-            await db.categories.delete(id);
-            await db.categories.add({
-              ...existing,
-              _deleted: true,
-              _pendingSync: true,
-            } as any);
-          }
+        } catch (apiError) {
+          console.error("[deleteCategory] 后端删除失败:", apiError);
+          throw new Error("删除分类失败，请检查网络连接");
         }
       } else {
-        // 离线状态：只从 IndexedDB 删除并标记
-        const existing = await db.categories.get(id);
-        if (existing) {
-          await db.categories.delete(id);
-          await db.categories.add({
-            ...existing,
-            _deleted: true,
-            _pendingSync: true,
-          } as any);
-        }
-        console.warn("Category deleted locally (pending sync when online)");
+        // 离线状态：提示用户
+        throw new Error("离线状态下无法删除分类，请连接网络后重试");
       }
 
       set((state) => ({
@@ -795,6 +875,7 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
               title: note.title,
               content: note.content,
               htmlContent: note.htmlContent,
+              fileType: note.fileType,
               categoryId: note.category,
               tags: note.tags,
               metadata: note.metadata,

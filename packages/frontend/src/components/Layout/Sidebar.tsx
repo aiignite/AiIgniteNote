@@ -15,6 +15,8 @@ import {
   MenuFoldOutlined,
   MenuUnfoldOutlined,
   CodeOutlined,
+  CaretRightOutlined,
+  CaretDownOutlined,
 } from "@ant-design/icons";
 import type { MenuProps } from "antd";
 import { useNavigate, useLocation } from "react-router-dom";
@@ -206,7 +208,7 @@ const NavigationSection = styled.div`
   }
 `;
 
-const SectionLabel = styled.div<{ $collapsed: boolean }>`
+const SectionLabel = styled.div<{ $collapsed: boolean; $clickable?: boolean }>`
   font-size: ${TYPOGRAPHY.fontSize.xs};
   font-weight: ${TYPOGRAPHY.fontWeight.semibold};
   letter-spacing: ${TYPOGRAPHY.letterSpacing.wider};
@@ -215,9 +217,33 @@ const SectionLabel = styled.div<{ $collapsed: boolean }>`
   margin-bottom: ${SPACING.sm};
   margin-top: ${SPACING.md};
   ${(props) => (props.$collapsed ? "text-align: center;" : "")};
+  display: flex;
+  align-items: center;
+  gap: ${SPACING.xs};
+  cursor: ${(props) => (props.$clickable ? "pointer" : "default")};
+  user-select: none;
+  transition: color ${TRANSITION.fast};
+
+  ${(props) =>
+    props.$clickable &&
+    `
+    &:hover {
+      color: ${COLORS.ink};
+    }
+  `}
 
   &:first-child {
     margin-top: 0;
+  }
+`;
+
+const CollapseIcon = styled.span`
+  margin-left: auto;
+  font-size: 10px;
+  transition: transform ${TRANSITION.fast};
+
+  &.collapsed {
+    transform: rotate(-90deg);
   }
 `;
 
@@ -260,7 +286,8 @@ const NavItem = styled.div<{
 
   &:hover {
     background: ${(props) => (props.$active ? COLORS.ink : COLORS.subtleLight)};
-    color: ${COLORS.ink};
+    color: ${(props) => (props.$active ? COLORS.paper : COLORS.ink)};
+    font-weight: ${TYPOGRAPHY.fontWeight.medium};
   }
 
   ${(props) =>
@@ -278,6 +305,11 @@ const NavIcon = styled.span<{ $active: boolean }>`
   font-size: ${TYPOGRAPHY.fontSize.md};
   color: ${(props) => (props.$active ? COLORS.paper : COLORS.inkMuted)};
   transition: color ${TRANSITION.fast};
+
+  /* NavItem 悬浮时，图标颜色也跟着变化 */
+  ${NavItem}:hover & {
+    color: ${(props) => (props.$active ? COLORS.paper : COLORS.ink)};
+  }
 `;
 
 const BottomSection = styled.div`
@@ -318,17 +350,35 @@ interface SidebarProps {
 function Sidebar({ collapsed, onCollapse }: SidebarProps) {
   const navigate = useNavigate();
   const location = useLocation();
-  const { categories, createNote, updateNote } = useNoteStore();
+  const {
+    categories,
+    createNote,
+    updateNote,
+    loadCategories,
+    setLastUsedFileType,
+  } = useNoteStore();
   const { tags, loadTags } = useTagStore();
   const [searchValue, setSearchValue] = useState("");
   const [dragOverCategoryId, setDragOverCategoryId] = useState<string | null>(
     null,
   );
 
-  // 加载标签
+  // 折叠状态
+  const [navExpanded, setNavExpanded] = useState(true);
+  const [categoriesExpanded, setCategoriesExpanded] = useState(true);
+  const [tagsExpanded, setTagsExpanded] = useState(true);
+
+  // 从 URL 参数中获取当前选中的分类 ID
+  const getCurrentCategoryId = () => {
+    const match = location.pathname.match(/\/category\/([^/]+)/);
+    return match ? match[1] : "";
+  };
+
+  // 加载分类和标签
   useEffect(() => {
+    loadCategories();
     loadTags();
-  }, [loadTags]);
+  }, [loadCategories, loadTags]);
 
   // 处理拖拽开始
   const handleDragStart = (e: React.DragEvent, noteId: string) => {
@@ -397,11 +447,15 @@ function Sidebar({ collapsed, onCollapse }: SidebarProps) {
         content: "",
         htmlContent: "",
         tags: [],
-        category: "", // 使用空字符串，后端会自动分配到"未分类"
+        category: getCurrentCategoryId(), // 使用当前选中的分类，如果没有则使用空字符串
         isDeleted: false,
         isFavorite: false,
         fileType,
       });
+
+      // 记住用户最后使用的文件类型
+      setLastUsedFileType(fileType);
+
       navigate(`/notes/${note.id}`);
     } catch (error) {
       console.error("Failed to create note:", error);
@@ -499,81 +553,117 @@ function Sidebar({ collapsed, onCollapse }: SidebarProps) {
 
       {/* 主导航 */}
       <NavigationSection>
-        {!collapsed && <SectionLabel $collapsed={false}>导航</SectionLabel>}
-
-        {mainNavItems.map((item) => (
-          <Tooltip
-            key={item.path}
-            title={collapsed ? item.label : undefined}
-            placement="right"
+        {!collapsed && (
+          <SectionLabel
+            $collapsed={false}
+            $clickable={true}
+            onClick={() => setNavExpanded(!navExpanded)}
           >
-            <NavItem
-              $active={isActive(item.path)}
-              onClick={() => navigate(item.path)}
-              draggable
-              onDragStart={(e) => {
-                const noteId = localStorage.getItem("currentNoteId");
-                if (noteId) handleDragStart(e as any, noteId);
-              }}
+            <span>导航</span>
+            <CollapseIcon className={navExpanded ? "" : "collapsed"}>
+              {navExpanded ? <CaretDownOutlined /> : <CaretRightOutlined />}
+            </CollapseIcon>
+          </SectionLabel>
+        )}
+
+        {navExpanded &&
+          mainNavItems.map((item) => (
+            <Tooltip
+              key={item.path}
+              title={collapsed ? item.label : undefined}
+              placement="right"
             >
-              <NavIcon $active={isActive(item.path)}>{item.icon}</NavIcon>
-              {!collapsed && <span>{item.label}</span>}
-            </NavItem>
-          </Tooltip>
-        ))}
+              <NavItem
+                $active={isActive(item.path)}
+                onClick={() => navigate(item.path)}
+                draggable
+                onDragStart={(e) => {
+                  const noteId = localStorage.getItem("currentNoteId");
+                  if (noteId) handleDragStart(e as any, noteId);
+                }}
+              >
+                <NavIcon $active={isActive(item.path)}>{item.icon}</NavIcon>
+                {!collapsed && <span>{item.label}</span>}
+              </NavItem>
+            </Tooltip>
+          ))}
 
         {/* 分类 */}
         {categories.length > 0 && !collapsed && (
           <>
-            <SectionLabel $collapsed={false}>分类</SectionLabel>
-            {categories.map((cat) => (
-              <NavItem
-                key={cat.id}
-                $active={isActive(`/notes/category/${cat.id}`)}
-                $draggable
-                $dragOver={dragOverCategoryId === cat.id}
-                onClick={() => navigate(`/notes/category/${cat.id}`)}
-                onDragOver={(e) => handleDragOver(e as any, cat.id)}
-                onDragLeave={handleDragLeave}
-                onDrop={(e) => handleDrop(e as any, cat.id)}
-              >
-                <NavIcon $active={isActive(`/notes/category/${cat.id}`)}>
-                  <FolderOutlined />
-                </NavIcon>
-                <span>{cat.name}</span>
-              </NavItem>
-            ))}
+            <SectionLabel
+              $collapsed={false}
+              $clickable={true}
+              onClick={() => setCategoriesExpanded(!categoriesExpanded)}
+            >
+              <span>分类</span>
+              <CollapseIcon className={categoriesExpanded ? "" : "collapsed"}>
+                {categoriesExpanded ? (
+                  <CaretDownOutlined />
+                ) : (
+                  <CaretRightOutlined />
+                )}
+              </CollapseIcon>
+            </SectionLabel>
+            {categoriesExpanded &&
+              categories.map((cat) => (
+                <NavItem
+                  key={cat.id}
+                  $active={isActive(`/notes/category/${cat.id}`)}
+                  $draggable
+                  $dragOver={dragOverCategoryId === cat.id}
+                  onClick={() => navigate(`/notes/category/${cat.id}`)}
+                  onDragOver={(e) => handleDragOver(e as any, cat.id)}
+                  onDragLeave={handleDragLeave}
+                  onDrop={(e) => handleDrop(e as any, cat.id)}
+                >
+                  <NavIcon $active={isActive(`/notes/category/${cat.id}`)}>
+                    {cat.icon || <FolderOutlined />}
+                  </NavIcon>
+                  <span>{cat.name}</span>
+                </NavItem>
+              ))}
           </>
         )}
 
         {/* 标签 */}
         {tags.length > 0 && !collapsed && (
           <>
-            <SectionLabel $collapsed={false}>标签</SectionLabel>
-            {tags.map((tag) => (
-              <NavItem
-                key={tag.id}
-                $active={isActive(`/notes/tag/${tag.id}`)}
-                onClick={() => navigate(`/notes/tag/${tag.id}`)}
-              >
-                <NavIcon $active={isActive(`/notes/tag/${tag.id}`)}>
-                  <TagsOutlined
-                    style={{ color: tag.color || COLORS.inkMuted }}
-                  />
-                </NavIcon>
-                <span style={{ flex: 1 }}>{tag.name}</span>
-                <Tag
-                  color={tag.color}
-                  style={{
-                    margin: 0,
-                    fontSize: TYPOGRAPHY.fontSize.xs,
-                    padding: "2px 6px",
-                  }}
+            <SectionLabel
+              $collapsed={false}
+              $clickable={true}
+              onClick={() => setTagsExpanded(!tagsExpanded)}
+            >
+              <span>标签</span>
+              <CollapseIcon className={tagsExpanded ? "" : "collapsed"}>
+                {tagsExpanded ? <CaretDownOutlined /> : <CaretRightOutlined />}
+              </CollapseIcon>
+            </SectionLabel>
+            {tagsExpanded &&
+              tags.map((tag) => (
+                <NavItem
+                  key={tag.id}
+                  $active={isActive(`/notes/tag/${tag.id}`)}
+                  onClick={() => navigate(`/notes/tag/${tag.id}`)}
                 >
-                  {/* 这里可以显示该标签的笔记数量 */}
-                </Tag>
-              </NavItem>
-            ))}
+                  <NavIcon $active={isActive(`/notes/tag/${tag.id}`)}>
+                    <TagsOutlined
+                      style={{ color: tag.color || COLORS.inkMuted }}
+                    />
+                  </NavIcon>
+                  <span style={{ flex: 1 }}>{tag.name}</span>
+                  <Tag
+                    color={tag.color}
+                    style={{
+                      margin: 0,
+                      fontSize: TYPOGRAPHY.fontSize.xs,
+                      padding: "2px 6px",
+                    }}
+                  >
+                    {/* 这里可以显示该标签的笔记数量 */}
+                  </Tag>
+                </NavItem>
+              ))}
           </>
         )}
 

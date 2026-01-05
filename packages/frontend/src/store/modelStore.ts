@@ -107,12 +107,14 @@ export const useModelStore = create<ModelStore>((set, get) => ({
         temperature: configData.temperature,
         maxTokens: configData.maxTokens,
         topP: configData.topP,
+        isPublic: configData.isPublic ?? false,
       });
       const newConfig = response.data;
 
       // 同步到 IndexedDB
       await db.modelConfigs.add({
         ...newConfig,
+        isPublic: newConfig.isPublic ?? false,
         apiKey: configData.apiKey || "", // 使用用户输入的 apiKey
       });
 

@@ -10,7 +10,8 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
-    "prisma:seed": "tsx prisma/seed.ts"
+    "prisma:seed": "tsx prisma/seed.ts",
+    "seed:public-assistants": "tsx prisma/seed-public-assistants.ts"
   },
   "dependencies": {
     "@ainote/shared": "workspace:*",

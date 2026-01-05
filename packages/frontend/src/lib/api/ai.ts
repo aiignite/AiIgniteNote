@@ -31,8 +31,9 @@ export interface AIAssistant {
   temperature?: number;
   maxTokens?: number;
   isActive?: boolean;
-  isBuiltIn?: boolean;
   sortOrder?: number;
+  isPublic?: boolean;
+  userId?: string;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -137,6 +138,8 @@ export const aiApi = {
     model: string;
     temperature?: number;
     maxTokens?: number;
+    isActive?: boolean;
+    isPublic?: boolean;
   }) => apiClient.post("/ai/assistants", data),
 
   // 更新助手
@@ -151,6 +154,7 @@ export const aiApi = {
       temperature?: number;
       maxTokens?: number;
       isActive?: boolean;
+      isPublic?: boolean;
     },
   ) => apiClient.put(`/ai/assistants/${id}`, data),
 

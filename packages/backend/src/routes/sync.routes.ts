@@ -257,7 +257,7 @@ export default async function syncRoutes(fastify: FastifyInstance) {
                 ...assistantData
               } = assistant;
 
-              if (existing && !existing.isBuiltIn) {
+              if (existing && canModify(existing.userId, req.userId)) {
                 await prisma.aiAssistant.update({
                   where: { id: assistant.id },
                   data: assistantData,

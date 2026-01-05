@@ -67,6 +67,7 @@ export default defineConfig({
   server: {
     port: 3100,
     host: true,
+    open: false, // 禁止自动打开浏览器
   },
   resolve: {
     alias: {

@@ -16,10 +16,15 @@ import {
   DeleteOutlined,
   ExportOutlined,
   ClockCircleOutlined,
-  LeftOutlined,
-  RightOutlined,
+  BarsOutlined,
+  AppstoreOutlined,
+  ArrowUpOutlined,
+  ArrowDownOutlined,
+  SortAscendingOutlined,
+  SortDescendingOutlined,
 } from "@ant-design/icons";
 import { useNoteStore } from "../../store/noteStore";
+import { useTagStore } from "../../store/tagStore";
 import { LocalNote as Note, NoteFileType } from "../../types";
 import { useParams, useLocation } from "react-router-dom";
 import dayjs from "dayjs";
@@ -52,15 +57,16 @@ const SearchSection = styled.div`
   padding: ${SPACING.lg};
   border-bottom: 1px solid ${COLORS.subtle};
   background: ${COLORS.paper};
-`;
-
-const ControlBar = styled.div`
   display: flex;
   align-items: center;
   gap: ${SPACING.sm};
-  padding: ${SPACING.md} ${SPACING.lg};
-  border-bottom: 1px solid ${COLORS.subtle};
-  background: ${COLORS.paper};
+`;
+
+const SearchInputWrapper = styled.div`
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: ${SPACING.sm};
 `;
 
 const IconButton = styled(Button)`
@@ -71,9 +77,19 @@ const IconButton = styled(Button)`
   display: flex;
   align-items: center;
   justify-content: center;
+  border: none;
+  background: transparent;
+  color: ${COLORS.inkMuted};
+  transition: all ${TRANSITION.fast};
 
   &:hover {
     background: ${COLORS.subtleLight};
+    color: ${COLORS.ink};
+  }
+
+  &.active {
+    color: ${COLORS.accent};
+    background: ${COLORS.accent}10;
   }
 `;
 
@@ -239,14 +255,21 @@ const MetaTag = styled.span`
   color: ${COLORS.inkMuted};
 `;
 
-const StyledTag = styled(Tag)`
+const StyledTag = styled(Tag)<{ $color?: string }>`
   margin: 0;
-  padding: 1px 6px;
+  padding: 2px 8px;
   border-radius: ${BORDER.radius.full};
   font-size: ${TYPOGRAPHY.fontSize.xs};
-  border: 1px solid ${COLORS.subtle};
-  background: ${COLORS.subtleLight};
-  color: ${COLORS.inkLight};
+  border: 1px solid ${(props) => props.$color || COLORS.subtle};
+  background: ${(props) =>
+    props.$color ? `${props.$color}15` : COLORS.subtleLight};
+  color: ${(props) => props.$color || COLORS.inkLight};
+  transition: all ${TRANSITION.fast};
+
+  &:hover {
+    border-color: ${COLORS.accent};
+    color: ${COLORS.accent};
+  }
 `;
 
 const TimeStamp = styled.span`
@@ -343,7 +366,7 @@ function NoteList({
     deleteNote,
     categories,
   } = useNoteStore();
-  const { getNotesByTagId } = useNoteStore(); // 从 store 中获取按标签查询的方法
+  const { tags, getNotesByTagId } = useTagStore();
   const [searchValue, setSearchValue] = useState("");
   const [filteredNotes, setFilteredNotes] = useState<Note[]>(notes);
   const [loading, setLoading] = useState(false);
@@ -355,7 +378,10 @@ function NoteList({
   const [moveModalVisible, setMoveModalVisible] = useState(false);
   const [targetCategoryId, setTargetCategoryId] = useState<string>("");
   const [viewMode, setViewMode] = useState<"summary" | "list">("summary");
-  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [sortBy, setSortBy] = useState<"updated" | "created" | "title">(
+    "updated",
+  );
+  const [sortOrder, setSortOrder] = useState<"desc" | "asc">("desc");
 
   // 判断当前路由类型
   const isFavoritesRoute = location.pathname === "/notes/favorites";
@@ -400,6 +426,22 @@ function NoteList({
           );
         }
 
+        // 排序
+        displayNotes.sort((a, b) => {
+          let comparison = 0;
+
+          if (sortBy === "title") {
+            comparison = a.title.localeCompare(b.title, "zh-CN");
+          } else if (sortBy === "created") {
+            comparison = a.createdAt - b.createdAt;
+          } else {
+            // updated (默认)
+            comparison = a.updatedAt - b.updatedAt;
+          }
+
+          return sortOrder === "asc" ? comparison : -comparison;
+        });
+
         // 只在组件还挂载时才更新状态
         if (isMounted) {
           setFilteredNotes(displayNotes);
@@ -431,6 +473,8 @@ function NoteList({
     categoryId,
     filterCategoryId,
     filterTagId,
+    sortBy,
+    sortOrder,
     getFavoriteNotes,
     getNotesByCategory,
     getNotesByTagId,
@@ -566,141 +610,225 @@ function NoteList({
     },
   ];
 
+  // 视图切换菜单
+  const viewMenuItems: MenuProps["items"] = [
+    {
+      key: "summary",
+      label: "摘要显示",
+      icon: <AppstoreOutlined />,
+      onClick: () => setViewMode("summary"),
+    },
+    {
+      key: "list",
+      label: "列表显示",
+      icon: <BarsOutlined />,
+      onClick: () => setViewMode("list"),
+    },
+  ];
+
+  // 排序菜单
+  const sortMenuItems: MenuProps["items"] = [
+    {
+      key: "updated-desc",
+      label: "更新时间 降序",
+      icon: <ArrowDownOutlined />,
+      onClick: () => {
+        setSortBy("updated");
+        setSortOrder("desc");
+      },
+    },
+    {
+      key: "updated-asc",
+      label: "更新时间 升序",
+      icon: <ArrowUpOutlined />,
+      onClick: () => {
+        setSortBy("updated");
+        setSortOrder("asc");
+      },
+    },
+    {
+      key: "created-desc",
+      label: "创建时间 降序",
+      icon: <ArrowDownOutlined />,
+      onClick: () => {
+        setSortBy("created");
+        setSortOrder("desc");
+      },
+    },
+    {
+      key: "created-asc",
+      label: "创建时间 升序",
+      icon: <ArrowUpOutlined />,
+      onClick: () => {
+        setSortBy("created");
+        setSortOrder("asc");
+      },
+    },
+    {
+      key: "title-asc",
+      label: "名称 升序",
+      icon: <SortAscendingOutlined />,
+      onClick: () => {
+        setSortBy("title");
+        setSortOrder("asc");
+      },
+    },
+    {
+      key: "title-desc",
+      label: "名称 降序",
+      icon: <SortDescendingOutlined />,
+      onClick: () => {
+        setSortBy("title");
+        setSortOrder("desc");
+      },
+    },
+  ];
+
+  // 获取当前排序显示文本
+  const getSortLabel = () => {
+    const labels = {
+      updated: "更新时间",
+      created: "创建时间",
+      title: "名称",
+    };
+    return labels[sortBy];
+  };
+
   return (
     <ListContainer>
-      {/* 搜索栏 */}
+      {/* 搜索栏和视图切换 */}
       <SearchSection>
-        <SearchInput
-          placeholder="搜索笔记..."
-          prefix={<SearchOutlined />}
-          value={searchValue}
-          onChange={(e) => setSearchValue(e.target.value)}
-          allowClear
-        />
+        <SearchInputWrapper>
+          <SearchInput
+            placeholder="搜索笔记..."
+            prefix={<SearchOutlined />}
+            value={searchValue}
+            onChange={(e) => setSearchValue(e.target.value)}
+            allowClear
+          />
+        </SearchInputWrapper>
+        <Dropdown menu={{ items: viewMenuItems }} trigger={["click"]}>
+          <IconButton
+            icon={
+              viewMode === "summary" ? <AppstoreOutlined /> : <BarsOutlined />
+            }
+            title="视图模式"
+          />
+        </Dropdown>
+        <Dropdown menu={{ items: sortMenuItems }} trigger={["click"]}>
+          <IconButton
+            icon={
+              sortOrder === "asc" ? <ArrowUpOutlined /> : <ArrowDownOutlined />
+            }
+            title={`排序：${getSortLabel()} ${sortOrder === "asc" ? "升序" : "降序"}`}
+          />
+        </Dropdown>
       </SearchSection>
 
-      {/* 控制栏 */}
-      <ControlBar>
-        <Select
-          style={{ width: 120 }}
-          value={viewMode}
-          onChange={setViewMode}
-          options={[
-            { label: "摘要显示", value: "summary" },
-            { label: "列表显示", value: "list" },
-          ]}
-          size="small"
-        />
-        <div style={{ flex: 1 }} />
-        <IconButton
-          icon={isCollapsed ? <RightOutlined /> : <LeftOutlined />}
-          onClick={() => setIsCollapsed(!isCollapsed)}
-          title={isCollapsed ? "展开" : "折叠"}
-        />
-      </ControlBar>
-
       {/* 笔记列表 */}
-      {!isCollapsed && (
-        <ListContent>
-          {loading ? (
-            <EmptyContainer>
-              <EmptyIcon>⏳</EmptyIcon>
-              <EmptyText>加载中...</EmptyText>
-            </EmptyContainer>
-          ) : filteredNotes.length === 0 ? (
-            <EmptyContainer>
-              <EmptyIcon>📝</EmptyIcon>
-              <EmptyText>
-                {searchValue
-                  ? "没有找到匹配的笔记"
-                  : isFavoritesRoute
-                    ? "还没有收藏的笔记"
-                    : isCategoryRoute
-                      ? "该分类下还没有笔记"
-                      : "还没有笔记，点击左侧按钮创建"}
-              </EmptyText>
-            </EmptyContainer>
-          ) : (
-            filteredNotes.map((note) => (
-              <NoteItemContainer
-                key={note.id}
-                $selected={selectedNoteId === note.id}
+      <ListContent>
+        {loading ? (
+          <EmptyContainer>
+            <EmptyIcon>⏳</EmptyIcon>
+            <EmptyText>加载中...</EmptyText>
+          </EmptyContainer>
+        ) : filteredNotes.length === 0 ? (
+          <EmptyContainer>
+            <EmptyIcon>📝</EmptyIcon>
+            <EmptyText>
+              {searchValue
+                ? "没有找到匹配的笔记"
+                : isFavoritesRoute
+                  ? "还没有收藏的笔记"
+                  : isCategoryRoute
+                    ? "该分类下还没有笔记"
+                    : "还没有笔记，点击左侧按钮创建"}
+            </EmptyText>
+          </EmptyContainer>
+        ) : (
+          filteredNotes.map((note) => (
+            <NoteItemContainer
+              key={note.id}
+              $selected={selectedNoteId === note.id}
+            >
+              <NoteItem
+                onClick={() => handleSelectNote(note)}
+                draggable
+                onDragStart={(e) => {
+                  e.dataTransfer.setData("noteId", note.id);
+                  e.dataTransfer.effectAllowed = "move";
+                }}
               >
-                <NoteItem
-                  onClick={() => handleSelectNote(note)}
-                  draggable
-                  onDragStart={(e) => {
-                    e.dataTransfer.setData("noteId", note.id);
-                    e.dataTransfer.effectAllowed = "move";
-                  }}
-                >
-                  <NoteHeader>
-                    <FileTypeIcon>
-                      {getFileTypeIcon(note.fileType)}
-                    </FileTypeIcon>
-                    <NoteTitle $selected={selectedNoteId === note.id}>
-                      {note.title || "无标题"}
-                      {note.isFavorite && (
-                        <StarFilled
-                          style={{
-                            fontSize: "12px",
-                            color: "#FAAD14",
-                            marginLeft: "6px",
-                          }}
-                        />
-                      )}
-                    </NoteTitle>
-                    <NoteActions>
-                      <ActionIconButton
-                        className={note.isFavorite ? "starred" : ""}
-                        icon={
-                          note.isFavorite ? <StarFilled /> : <StarOutlined />
-                        }
-                        onClick={(e) => handleToggleFavorite(e, note.id)}
+                <NoteHeader>
+                  <FileTypeIcon>{getFileTypeIcon(note.fileType)}</FileTypeIcon>
+                  <NoteTitle $selected={selectedNoteId === note.id}>
+                    {note.title || "无标题"}
+                    {note.isFavorite && (
+                      <StarFilled
+                        style={{
+                          fontSize: "12px",
+                          color: "#FAAD14",
+                          marginLeft: "6px",
+                        }}
                       />
-                      <Dropdown
-                        menu={{ items: getActionMenuItems(note) }}
-                        trigger={["click"]}
-                      >
-                        <ActionIconButton
-                          icon={<MoreOutlined />}
-                          onClick={(e) => e.stopPropagation()}
-                        />
-                      </Dropdown>
-                    </NoteActions>
-                  </NoteHeader>
+                    )}
+                  </NoteTitle>
+                  <NoteActions>
+                    <ActionIconButton
+                      className={note.isFavorite ? "starred" : ""}
+                      icon={note.isFavorite ? <StarFilled /> : <StarOutlined />}
+                      onClick={(e) => handleToggleFavorite(e, note.id)}
+                    />
+                    <Dropdown
+                      menu={{ items: getActionMenuItems(note) }}
+                      trigger={["click"]}
+                    >
+                      <ActionIconButton
+                        icon={<MoreOutlined />}
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                    </Dropdown>
+                  </NoteActions>
+                </NoteHeader>
 
-                  {viewMode === "summary" && (
-                    <>
-                      <NotePreview>{note.content || "无内容"}</NotePreview>
+                {viewMode === "summary" && (
+                  <>
+                    <NotePreview>{note.content || "无内容"}</NotePreview>
 
-                      <NoteMeta>
-                        {note.tags.length > 0 && (
-                          <>
-                            <MetaTag>
-                              <TagOutlined style={{ fontSize: "11px" }} />
-                            </MetaTag>
-                            {note.tags.slice(0, 2).map((tag, index) => (
-                              <StyledTag key={index}>{tag}</StyledTag>
-                            ))}
-                            {note.tags.length > 2 && (
-                              <StyledTag>+{note.tags.length - 2}</StyledTag>
-                            )}
-                          </>
-                        )}
-                        <TimeStamp>
-                          <ClockCircleOutlined style={{ fontSize: "11px" }} />
-                          {dayjs(note.updatedAt).fromNow()}
-                        </TimeStamp>
-                      </NoteMeta>
-                    </>
-                  )}
-                </NoteItem>
-              </NoteItemContainer>
-            ))
-          )}
-        </ListContent>
-      )}
+                    <NoteMeta>
+                      {note.tags.length > 0 && (
+                        <>
+                          <MetaTag>
+                            <TagOutlined style={{ fontSize: "11px" }} />
+                          </MetaTag>
+                          {note.tags.slice(0, 2).map((tagName, index) => {
+                            // 查找标签对象获取颜色
+                            const tag = tags.find((t) => t.name === tagName);
+                            const tagColor = tag?.color;
+
+                            return (
+                              <StyledTag key={index} $color={tagColor}>
+                                {tagName}
+                              </StyledTag>
+                            );
+                          })}
+                          {note.tags.length > 2 && (
+                            <StyledTag>+{note.tags.length - 2}</StyledTag>
+                          )}
+                        </>
+                      )}
+                      <TimeStamp>
+                        <ClockCircleOutlined style={{ fontSize: "11px" }} />
+                        {dayjs(note.updatedAt).fromNow()}
+                      </TimeStamp>
+                    </NoteMeta>
+                  </>
+                )}
+              </NoteItem>
+            </NoteItemContainer>
+          ))
+        )}
+      </ListContent>
 
       {/* 重命名弹窗 */}
       <Modal

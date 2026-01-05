@@ -2,9 +2,10 @@ import { FastifyInstance } from "fastify";
 import { prisma } from "../utils/prisma.js";
 import { authenticate } from "../middleware/auth.middleware.js";
 import { encrypt, decrypt } from "../utils/encryption.js";
+import { buildUserQuery, canModify, canDelete } from "../utils/permission.helper.js";
 
 export default async function modelRoutes(fastify: FastifyInstance) {
-  // Get model configs
+  // Get model configs（用户自己的 + 公有的）
   fastify.get(
     "/configs",
     {
@@ -14,7 +15,7 @@ export default async function modelRoutes(fastify: FastifyInstance) {
       const req = request as any;
 
       const configs = await prisma.modelConfig.findMany({
-        where: { userId: req.userId },
+        where: buildUserQuery(req.userId),
         select: {
           id: true,
           name: true,
@@ -27,14 +28,21 @@ export default async function modelRoutes(fastify: FastifyInstance) {
           topP: true,
           enabled: true,
           isDefault: true,
+          isPublic: true,
+          userId: true,
           createdAt: true,
           updatedAt: true,
-          // Exclude apiKey and userId
+          // Exclude apiKey
         },
         orderBy: { isDefault: "desc" },
       });
 
-      return configs;
+      // 对公有的模型（非当前用户创建的），隐藏 API Key
+      return configs.map((config) => ({
+        ...config,
+        // 对于非当前用户的公有配置，不返回完整 apiKey
+        // apiKey 已经在 select 中被排除了
+      }));
     },
   );
 
@@ -56,6 +64,7 @@ export default async function modelRoutes(fastify: FastifyInstance) {
         temperature?: number;
         maxTokens?: number;
         topP?: number;
+        isPublic?: boolean;
       };
 
       try {
@@ -73,6 +82,7 @@ export default async function modelRoutes(fastify: FastifyInstance) {
             temperature: body.temperature,
             maxTokens: body.maxTokens,
             topP: body.topP,
+            isPublic: body.isPublic ?? false,
             userId: req.userId,
           },
           select: {
@@ -87,6 +97,7 @@ export default async function modelRoutes(fastify: FastifyInstance) {
             topP: true,
             enabled: true,
             isDefault: true,
+            isPublic: true,
             createdAt: true,
             updatedAt: true,
           },
@@ -125,17 +136,29 @@ export default async function modelRoutes(fastify: FastifyInstance) {
         topP?: number;
         enabled?: boolean;
         isDefault?: boolean;
+        isPublic?: boolean;
       };
 
       try {
-        // 先检查是否存在
-        const existing = await prisma.modelConfig.findFirst({
-          where: { id, userId: req.userId },
+        // 先检查权限（不使用 userId 过滤）
+        const existing = await prisma.modelConfig.findUnique({
+          where: { id },
         });
 
         if (!existing) {
           reply.status(404).send({
             error: { message: "Config not found", code: "CONFIG_NOT_FOUND" },
+          });
+          return;
+        }
+
+        // 检查权限：只有创建者可以修改
+        if (!canModify(existing.userId, req.userId)) {
+          reply.status(403).send({
+            error: {
+              message: "You don't have permission to modify this model config",
+              code: "FORBIDDEN",
+            },
           });
           return;
         }
@@ -155,6 +178,7 @@ export default async function modelRoutes(fastify: FastifyInstance) {
           ...(body.topP !== undefined && { topP: body.topP }),
           ...(body.enabled !== undefined && { enabled: body.enabled }),
           ...(body.isDefault !== undefined && { isDefault: body.isDefault }),
+          ...(body.isPublic !== undefined && { isPublic: body.isPublic }),
         };
 
         // Encrypt new API key if provided
@@ -188,6 +212,8 @@ export default async function modelRoutes(fastify: FastifyInstance) {
             topP: true,
             enabled: true,
             isDefault: true,
+            isPublic: true,
+            userId: true,
             createdAt: true,
             updatedAt: true,
           },
@@ -216,8 +242,34 @@ export default async function modelRoutes(fastify: FastifyInstance) {
       const { id } = request.params as { id: string };
 
       try {
-        await prisma.modelConfig.deleteMany({
-          where: { id, userId: req.userId },
+        // 先检查权限（不使用 userId 过滤）
+        const existing = await prisma.modelConfig.findUnique({
+          where: { id },
+        });
+
+        if (!existing) {
+          reply.status(404).send({
+            error: {
+              message: "Config not found",
+              code: "CONFIG_NOT_FOUND",
+            },
+          });
+          return;
+        }
+
+        // 检查权限：只有创建者可以删除
+        if (!canDelete(existing.userId, req.userId)) {
+          reply.status(403).send({
+            error: {
+              message: "You don't have permission to delete this model config",
+              code: "FORBIDDEN",
+            },
+          });
+          return;
+        }
+
+        await prisma.modelConfig.delete({
+          where: { id },
         });
 
         return { message: "Config deleted successfully" };

@@ -7,6 +7,7 @@ import AIAssistantSidebar from "../AIAssistant/AIAssistantSidebar";
 import { useNoteStore } from "../../store/noteStore";
 import { useModelStore } from "../../store/modelStore";
 import { useFullscreenStore } from "../../store/fullscreenStore";
+import { useAIStore } from "../../store/aiStore";
 import { initializeDatabase } from "../../db";
 import { useGlobalKeyboardShortcuts } from "../../hooks/useKeyboardShortcuts";
 import styled, { keyframes } from "styled-components";
@@ -177,6 +178,7 @@ function MainLayout() {
   const [aiAssistantWidth, setAiAssistantWidth] = useState(380);
   const { loadNotes, loadCategories } = useNoteStore();
   const { loadConfigs } = useModelStore();
+  const { loadAssistants } = useAIStore();
 
   // 启用全局快捷键
   useGlobalKeyboardShortcuts();
@@ -200,9 +202,11 @@ function MainLayout() {
       await loadNotes();
       await loadCategories();
       await loadConfigs();
+      // 加载 AI 助手（此时用户已登录，token 已设置）
+      await loadAssistants();
     };
     init();
-  }, [loadNotes, loadCategories, loadConfigs]);
+  }, [loadNotes, loadCategories, loadConfigs, loadAssistants]);
 
   // 监听窗口大小变化
   useEffect(() => {

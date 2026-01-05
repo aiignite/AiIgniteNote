@@ -12,11 +12,9 @@ import {
   EllipsisOutlined,
   CloseOutlined,
   DeleteOutlined,
-  NodeIndexOutlined,
-  ApartmentOutlined,
-  FileTextOutlined,
-  SettingOutlined,
+  InfoCircleOutlined,
 } from "@ant-design/icons";
+import { useNavigate } from "react-router-dom";
 import { useAIStore } from "../../store/aiStore";
 import { AIConversation } from "../../types";
 import styled, { keyframes, css } from "styled-components";
@@ -29,8 +27,6 @@ import {
   TRANSITION,
   SHADOW,
 } from "../../styles/design-tokens";
-import { SelectionHelper } from "../../types/selection";
-import { SelectionSettingsModal } from "./SelectionSettings";
 
 const { TextArea } = Input;
 
@@ -220,7 +216,17 @@ const StyledSelect = styled(Select)`
 const AssistantOption = styled.div`
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: ${SPACING.sm};
+  width: 100%;
+
+  .assistant-left {
+    display: flex;
+    align-items: center;
+    gap: ${SPACING.sm};
+    flex: 1;
+    min-width: 0;
+  }
 
   .assistant-avatar {
     font-size: ${TYPOGRAPHY.fontSize.md};
@@ -229,6 +235,7 @@ const AssistantOption = styled.div`
   .assistant-info {
     display: flex;
     flex-direction: column;
+    min-width: 0;
 
     .assistant-name {
       font-size: ${TYPOGRAPHY.fontSize.sm};
@@ -240,6 +247,16 @@ const AssistantOption = styled.div`
       font-size: ${TYPOGRAPHY.fontSize.xs};
       color: ${COLORS.inkMuted};
     }
+  }
+
+  .assistant-detail-btn {
+    flex-shrink: 0;
+    opacity: 0;
+    transition: opacity ${TRANSITION.fast};
+  }
+
+  &:hover .assistant-detail-btn {
+    opacity: 1;
   }
 `;
 
@@ -431,60 +448,6 @@ const InputActions = styled.div`
   display: flex;
   justify-content: flex-end;
   gap: ${SPACING.xs};
-`;
-
-const SelectedTextIndicator = styled.div`
-  padding: ${SPACING.sm} ${SPACING.md};
-  background: ${COLORS.accent}15;
-  border: 1px solid ${COLORS.accent}40;
-  border-radius: ${BORDER.radius.md};
-  font-size: ${TYPOGRAPHY.fontSize.xs};
-  color: ${COLORS.accent};
-  display: flex;
-  flex-direction: column;
-  gap: ${SPACING.xs};
-
-  .selected-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    font-weight: ${TYPOGRAPHY.fontWeight.medium};
-  }
-
-  .selected-source {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-  }
-
-  .selected-content {
-    background: ${COLORS.paper};
-    border: 1px solid ${COLORS.accent}30;
-    border-radius: ${BORDER.radius.sm};
-    padding: ${SPACING.xs} ${SPACING.sm};
-    font-family: ${TYPOGRAPHY.fontFamily.mono};
-    font-size: ${TYPOGRAPHY.fontSize.xs};
-    color: ${COLORS.ink};
-    max-height: 100px;
-    overflow-y: auto;
-    white-space: pre-wrap;
-    word-break: break-word;
-  }
-
-  .clear-selection {
-    cursor: pointer;
-    padding: 4px 8px;
-    border-radius: ${BORDER.radius.sm};
-    transition: background ${TRANSITION.fast};
-    background: ${COLORS.accent}20;
-    display: flex;
-    align-items: center;
-    gap: 4px;
-
-    &:hover {
-      background: ${COLORS.accent}30;
-    }
-  }
 `;
 
 const InputButton = styled(Button)<{ $variant?: "primary" | "default" }>`
@@ -699,13 +662,8 @@ function CopyButton({ content }: { content: string }) {
 }
 
 // 助手选择下拉组件
-function AssistantSelect({
-  onOpenSettings,
-  noteId,
-}: {
-  onOpenSettings: () => void;
-  noteId?: string;
-}) {
+function AssistantSelect({ noteId }: { noteId?: string }) {
+  const navigate = useNavigate();
   const {
     currentAssistant,
     setCurrentAssistant,
@@ -745,6 +703,14 @@ function AssistantSelect({
     setMenuVisible(false);
   };
 
+  // 查看助手详情（打开编辑）
+  const handleViewDetail = (e: React.MouseEvent, assistantId: string) => {
+    e.stopPropagation();
+    // 导航到设置页面的 AI 助手标签，并指定要编辑的助手
+    navigate(`/settings?tab=ai-assistants&edit=${assistantId}`);
+    setMenuVisible(false);
+  };
+
   // 获取最近的对话（最多10条）
   const recentConversations = conversations
     .filter((c) => c.messages.length > 0)
@@ -773,8 +739,13 @@ function AssistantSelect({
         <StyledSelect
           value={currentAssistant.id}
           onChange={handleChange}
-          style={{ width: 160 }}
+          style={{ width: 260 }}
           optionLabelProp="label"
+          styles={{
+            popup: {
+              root: { minWidth: 360 },
+            },
+          }}
         >
           {assistants.map((assistant) => (
             <Select.Option
@@ -783,13 +754,25 @@ function AssistantSelect({
               label={assistant.name}
             >
               <AssistantOption>
-                <span className="assistant-avatar">{assistant.avatar}</span>
-                <div className="assistant-info">
-                  <span className="assistant-name">{assistant.name}</span>
-                  <span className="assistant-desc">
-                    {assistant.description}
-                  </span>
+                <div className="assistant-left">
+                  <span className="assistant-avatar">{assistant.avatar}</span>
+                  <div className="assistant-info">
+                    <span className="assistant-name">{assistant.name}</span>
+                    <span className="assistant-desc">
+                      {assistant.description}
+                    </span>
+                  </div>
                 </div>
+                <Tooltip title="查看详情">
+                  <Button
+                    type="text"
+                    size="small"
+                    icon={<InfoCircleOutlined />}
+                    className="assistant-detail-btn"
+                    onClick={(e) => handleViewDetail(e, assistant.id)}
+                    style={{ padding: "4px 8px" }}
+                  />
+                </Tooltip>
               </AssistantOption>
             </Select.Option>
           ))}
@@ -798,9 +781,6 @@ function AssistantSelect({
       <SelectorRight>
         <Tooltip title="新建对话">
           <IconButton icon={<PlusOutlined />} onClick={handleNewChat} />
-        </Tooltip>
-        <Tooltip title="选择内容设置">
-          <IconButton icon={<SettingOutlined />} onClick={onOpenSettings} />
         </Tooltip>
         <Tooltip title="更多">
           <IconButton
@@ -897,62 +877,6 @@ function ChatInterface({ noteId }: ChatInterfaceProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [abortController, setAbortController] =
     useState<AbortController | null>(null);
-  const [settingsModalVisible, setSettingsModalVisible] = useState(false);
-  const [previousInputValue, setPreviousInputValue] = useState("");
-
-  // 获取当前选中的文本
-  const getSelectedText = () => {
-    const selection = window.getSelection();
-    return selection?.toString().trim() || "";
-  };
-
-  // 获取选择来源的图标
-  const getSourceIcon = () => {
-    switch (selectedContent.source) {
-      case "mindmap":
-        return <NodeIndexOutlined />;
-      case "drawio":
-        return <ApartmentOutlined />;
-      case "richtext":
-        return <FileTextOutlined />;
-      case "markdown":
-        return <FileTextOutlined />;
-      case "monaco":
-        return <FileTextOutlined />;
-      default:
-        return <FileTextOutlined />;
-    }
-  };
-
-  // 监听文本选择变化（保持兼容性）
-  useEffect(() => {
-    const handleSelectionChange = () => {
-      const text = getSelectedText();
-      setSelectedText(text);
-    };
-
-    document.addEventListener("selectionchange", handleSelectionChange);
-    return () => {
-      document.removeEventListener("selectionchange", handleSelectionChange);
-    };
-  }, [setSelectedText]);
-
-  // 监听选择内容变化，自动填写到输入框
-  useEffect(() => {
-    if (selectedContent.text) {
-      // 保存当前输入框的值
-      setPreviousInputValue(inputValue);
-
-      // 只将选中的纯文本添加到输入框，不加任何描述
-      setInputValue(selectedContent.text);
-    } else {
-      // 清除选择时，恢复之前的值
-      if (previousInputValue) {
-        setInputValue(previousInputValue);
-        setPreviousInputValue("");
-      }
-    }
-  }, [selectedContent]);
 
   // 自动滚动到底部
   useEffect(() => {
@@ -971,15 +895,7 @@ function ChatInterface({ noteId }: ChatInterfaceProps) {
       return;
     }
 
-    // 输入框已包含选择内容，直接发送即可
     const messageToSend = inputValue.trim();
-
-    // 清除选择状态
-    clearSelectedContent();
-    setPreviousInputValue("");
-    // 清除原生文本选择
-    window.getSelection()?.removeAllRanges();
-
     setInputValue("");
 
     // 创建 AbortController 用于取消请求
@@ -1017,12 +933,6 @@ function ChatInterface({ noteId }: ChatInterfaceProps) {
     setInputValue("");
   };
 
-  // 清除文本选择
-  const handleClearSelection = () => {
-    window.getSelection()?.removeAllRanges();
-    clearSelectedContent();
-  };
-
   // 渲染消息内容（支持 Markdown）
   const renderMessageContent = (content: string, isUser: boolean) => {
     if (isUser) {
@@ -1056,10 +966,7 @@ function ChatInterface({ noteId }: ChatInterfaceProps) {
           borderBottom: `1px solid ${COLORS.subtle}`,
         }}
       >
-        <AssistantSelect
-          onOpenSettings={() => setSettingsModalVisible(true)}
-          noteId={noteId}
-        />
+        <AssistantSelect noteId={noteId} />
       </InputContainer>
 
       {/* 消息列表 */}
@@ -1140,32 +1047,6 @@ function ChatInterface({ noteId }: ChatInterfaceProps) {
 
       {/* 输入区域 */}
       <InputContainer>
-        {/* 选中文本提示 */}
-        {selectedContent.text && (
-          <SelectedTextIndicator>
-            <div className="selected-header">
-              <div className="selected-source">
-                {getSourceIcon()}
-                <span>
-                  {SelectionHelper.getSelectionDescription(selectedContent)}
-                </span>
-              </div>
-              <div className="clear-selection" onClick={handleClearSelection}>
-                <CloseOutlined />
-                <span>清除</span>
-              </div>
-            </div>
-            {selectedContent.type === "mindmap_nodes" && (
-              <div className="selected-content">{selectedContent.text}</div>
-            )}
-            {selectedContent.type === "text" &&
-              selectedContent.text.length > 50 && (
-                <div className="selected-content">
-                  {SelectionHelper.truncateText(selectedContent.text, 200)}
-                </div>
-              )}
-          </SelectedTextIndicator>
-        )}
         <InputWrapper>
           <StyledTextArea
             placeholder={`与${currentAssistant.name}对话... (回车发送，Shift+Enter换行)`}
@@ -1211,12 +1092,6 @@ function ChatInterface({ noteId }: ChatInterfaceProps) {
           )}
         </InputActions>
       </InputContainer>
-
-      {/* 选择内容设置弹窗 */}
-      <SelectionSettingsModal
-        visible={settingsModalVisible}
-        onClose={() => setSettingsModalVisible(false)}
-      />
     </ChatContainer>
   );
 }
