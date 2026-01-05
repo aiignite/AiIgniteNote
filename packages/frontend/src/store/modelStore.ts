@@ -9,6 +9,8 @@ interface ModelStore {
   usageLogs: ModelUsageLog[];
   quota: ModelQuota | null;
   isLoading: boolean;
+  isDetecting: boolean;
+  detectedModels: string[];
 
   // Actions
   loadConfigs: () => Promise<void>;
@@ -21,6 +23,12 @@ interface ModelStore {
   logUsage: (log: Omit<ModelUsageLog, "id" | "timestamp">) => Promise<void>;
   updateQuota: (quota: ModelQuota) => void;
   testConnection: (config: ModelConfig) => Promise<boolean>;
+  detectModels: (
+    apiType: string,
+    apiEndpoint: string,
+    apiKey?: string,
+  ) => Promise<string[]>;
+  clearDetectedModels: () => void;
 }
 
 export const useModelStore = create<ModelStore>((set, get) => ({
@@ -29,6 +37,8 @@ export const useModelStore = create<ModelStore>((set, get) => ({
   usageLogs: [],
   quota: null,
   isLoading: false,
+  isDetecting: false,
+  detectedModels: [],
 
   loadConfigs: async () => {
     set({ isLoading: true });
@@ -274,5 +284,27 @@ export const useModelStore = create<ModelStore>((set, get) => ({
       console.error("Failed to test connection:", error);
       return false;
     }
+  },
+
+  detectModels: async (apiType, apiEndpoint, apiKey) => {
+    set({ isDetecting: true, detectedModels: [] });
+    try {
+      const response = await modelsApi.detectModels({
+        apiType,
+        apiEndpoint,
+        apiKey,
+      });
+      const models = response.data?.models || [];
+      set({ detectedModels: models, isDetecting: false });
+      return models;
+    } catch (error: any) {
+      console.error("Failed to detect models:", error);
+      set({ isDetecting: false, detectedModels: [] });
+      throw error;
+    }
+  },
+
+  clearDetectedModels: () => {
+    set({ detectedModels: [] });
   },
 }));

@@ -32,9 +32,11 @@ export function useKeyboardShortcuts(
       shortcuts.forEach((shortcut) => {
         if (shortcut.disabled) return;
 
-        const keyMatch =
-          e.key.toLowerCase() === shortcut.key.toLowerCase() ||
-          e.code === shortcut.key;
+        // 安全地获取 key，防止 undefined
+        const eventKey = e.key?.toLowerCase() || "";
+        const shortcutKey = shortcut.key?.toLowerCase() || "";
+
+        const keyMatch = eventKey === shortcutKey || e.code === shortcut.key;
 
         const ctrlMatch =
           shortcut.ctrlKey === undefined || e.ctrlKey === shortcut.ctrlKey;
@@ -64,7 +66,8 @@ export function useKeyboardShortcuts(
 
 // 全局快捷键 Hook
 export function useGlobalKeyboardShortcuts() {
-  const { createNote, currentNote, setCurrentNote, lastUsedFileType } = useNoteStore();
+  const { createNote, currentNote, setCurrentNote, lastUsedFileType } =
+    useNoteStore();
   const { createConversation } = useAIStore();
 
   const handleNewNote = useCallback(async () => {

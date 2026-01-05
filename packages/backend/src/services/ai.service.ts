@@ -203,7 +203,11 @@ export class AIService {
     apiKey: string,
     messages: ChatMessage[],
   ): Promise<ChatResponse> {
-    const response = await fetch(modelConfig.apiEndpoint, {
+    // 构建完整的 API URL
+    const baseUrl = modelConfig.apiEndpoint.replace(/\/$/, ""); // 移除末尾的斜杠
+    const chatUrl = `${baseUrl}/chat/completions`;
+
+    const response = await fetch(chatUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -267,7 +271,11 @@ export class AIService {
     const anthropicMessages = this.convertToAnthropicMessages(messages);
     const systemMessage = messages.find((m) => m.role === "system")?.content;
 
-    const response = await fetch(modelConfig.apiEndpoint, {
+    // 构建完整的 API URL
+    const baseUrl = modelConfig.apiEndpoint.replace(/\/$/, ""); // 移除末尾的斜杠
+    const messagesUrl = `${baseUrl}/messages`;
+
+    const response = await fetch(messagesUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -327,7 +335,11 @@ export class AIService {
     modelConfig: any,
     messages: ChatMessage[],
   ): Promise<ChatResponse> {
-    const response = await fetch(modelConfig.apiEndpoint, {
+    // 构建完整的 API URL
+    const baseUrl = modelConfig.apiEndpoint.replace(/\/$/, ""); // 移除末尾的斜杠
+    const chatUrl = `${baseUrl}/api/chat`;
+
+    const response = await fetch(chatUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -503,7 +515,11 @@ export class AIService {
     apiKey: string,
     messages: ChatMessage[],
   ): AsyncGenerator<string> {
-    const response = await fetch(modelConfig.apiEndpoint, {
+    // 构建完整的 API URL
+    const baseUrl = modelConfig.apiEndpoint.replace(/\/$/, ""); // 移除末尾的斜杠
+    const chatUrl = `${baseUrl}/chat/completions`;
+
+    const response = await fetch(chatUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -566,6 +582,10 @@ export class AIService {
     const anthropicMessages = this.convertToAnthropicMessages(messages);
     const systemMessage = messages.find((m) => m.role === "system")?.content;
 
+    // 构建完整的 API URL
+    const baseUrl = modelConfig.apiEndpoint.replace(/\/$/, ""); // 移除末尾的斜杠
+    const messagesUrl = `${baseUrl}/messages`;
+
     console.log(
       "[AIService] Anthropic request body:",
       JSON.stringify(
@@ -583,13 +603,13 @@ export class AIService {
       ),
     );
 
-    console.log("[AIService] API Endpoint:", modelConfig.apiEndpoint);
+    console.log("[AIService] API Endpoint:", messagesUrl);
     console.log(
       "[AIService] API Key (first 20 chars):",
       apiKey.substring(0, 20) + "...",
     );
 
-    const response = await fetch(modelConfig.apiEndpoint, {
+    const response = await fetch(messagesUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -713,7 +733,11 @@ export class AIService {
     modelConfig: any,
     messages: ChatMessage[],
   ): AsyncGenerator<string> {
-    const response = await fetch(modelConfig.apiEndpoint, {
+    // 构建完整的 API URL
+    const baseUrl = modelConfig.apiEndpoint.replace(/\/$/, ""); // 移除末尾的斜杠
+    const chatUrl = `${baseUrl}/api/chat`;
+
+    const response = await fetch(chatUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -790,5 +814,141 @@ export class AIService {
   ): AsyncGenerator<string> {
     // LM Studio兼容OpenAI格式
     yield* this.chatStreamOpenAI(modelConfig, "", messages);
+  }
+
+  /**
+   * 检测本地可用的模型列表
+   * @param apiType API 类型 (ollama, lmstudio)
+   * @param apiEndpoint API 端点
+   * @param apiKey API 密钥（可选，本地模型不需要）
+   * @returns 模型名称数组
+   */
+  async detectModels(
+    apiType: string,
+    apiEndpoint: string,
+    apiKey?: string,
+  ): Promise<string[]> {
+    try {
+      switch (apiType) {
+        case "ollama":
+          return await this.detectOllamaModels(apiEndpoint);
+        case "lmstudio":
+          return await this.detectLMStudioModels(apiEndpoint);
+        default:
+          throw new Error("该 API 类型不支持自动检测模型");
+      }
+    } catch (error: any) {
+      throw new Error(`模型检测失败: ${error.message}`);
+    }
+  }
+
+  /**
+   * 检测 Ollama 本地模型
+   * GET http://localhost:11434/api/tags
+   */
+  private async detectOllamaModels(endpoint: string): Promise<string[]> {
+    // 移除末尾的斜杠并添加路径
+    const baseUrl = endpoint.replace(/\/$/, "");
+    const url = `${baseUrl}/api/tags`;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000); // 5秒超时
+
+    try {
+      const response = await fetch(url, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        throw new Error(`Ollama 服务响应错误: ${response.status}`);
+      }
+
+      const data = await response.json();
+      return data.models?.map((m: any) => m.name) || [];
+    } catch (error: any) {
+      if (error.name === "AbortError") {
+        throw new Error("连接超时，请确认 Ollama 服务已启动");
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * 检测 LM Studio 本地模型
+   * GET http://localhost:1234/v1/models
+   */
+  private async detectLMStudioModels(endpoint: string): Promise<string[]> {
+    // 智能处理 URL：如果已经包含 /v1，则直接添加 /models
+    let baseUrl = endpoint.replace(/\/$/, "");
+    let url: string;
+
+    if (baseUrl.endsWith("/v1")) {
+      // 如果端点已经是 http://localhost:1234/v1，直接添加 /models
+      url = `${baseUrl}/models`;
+    } else if (baseUrl.includes("/v1/")) {
+      // 如果端点包含 /v1/，说明路径可能不对
+      throw new Error("LM Studio 端点格式不正确，应为: http://localhost:1234/v1");
+    } else {
+      // 如果端点是 http://localhost:1234，添加 /v1/models
+      url = `${baseUrl}/v1/models`;
+    }
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000); // 5秒超时
+
+    try {
+      const response = await fetch(url, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        throw new Error(`LM Studio 服务响应错误: ${response.status}`);
+      }
+
+      const data = await response.json();
+      return data.data?.map((m: any) => m.id) || [];
+    } catch (error: any) {
+      if (error.name === "AbortError") {
+        throw new Error("连接超时，请确认 LM Studio 服务已启动");
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * 测试模型连接
+   * @param config 模型配置
+   * @returns 连接是否成功
+   */
+  async testConnection(config: any): Promise<boolean> {
+    try {
+      const testMessage: ChatMessage = {
+        role: "user",
+        content: "Hi",
+      };
+
+      const request: ChatRequest = {
+        modelId: config.id,
+        messages: [testMessage],
+      };
+
+      // 发送一个简单的聊天请求来测试连接
+      await this.chat(config.userId, request);
+      return true;
+    } catch (error) {
+      console.error("Connection test failed:", error);
+      return false;
+    }
   }
 }

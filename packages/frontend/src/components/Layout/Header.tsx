@@ -21,8 +21,8 @@ const HeaderContainer = styled.div`
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: ${SPACING.lg} ${SPACING.xl};
-  min-height: 64px;
+  padding: ${SPACING.md} ${SPACING.xl};
+  min-height: 56px;
   background: ${COLORS.paper};
   border-bottom: 1px solid ${COLORS.subtle};
 `;
@@ -35,23 +35,34 @@ const LeftSection = styled.div`
 `;
 
 const DateDisplay = styled.div`
-  font-family: ${TYPOGRAPHY.fontFamily.display};
+  font-family: "Georgia", "Times New Roman", "Times", serif;
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: ${SPACING.md};
+  letter-spacing: 0.02em;
+  height: 36px;
 `;
 
 const DateMain = styled.div`
-  font-size: ${TYPOGRAPHY.fontSize.xl};
-  font-weight: ${TYPOGRAPHY.fontWeight.normal};
+  font-size: 18px;
+  font-weight: 500;
   color: ${COLORS.ink};
-  letter-spacing: ${TYPOGRAPHY.letterSpacing.tight};
+  letter-spacing: 0.03em;
+  line-height: 1;
+
+  span {
+    font-weight: 400;
+    letter-spacing: 0.05em;
+  }
 `;
 
 const DateSub = styled.div`
-  font-size: ${TYPOGRAPHY.fontSize.sm};
+  font-size: 13px;
   color: ${COLORS.inkMuted};
-  font-weight: ${TYPOGRAPHY.fontWeight.light};
+  font-weight: 400;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  line-height: 1;
 `;
 
 const RightSection = styled.div`
@@ -62,6 +73,7 @@ const RightSection = styled.div`
 
 const ActionButton = styled(Button)<{ $active?: boolean }>`
   height: 36px;
+  padding: 0 ${SPACING.md};
   border-radius: ${BORDER.radius.sm};
   border-color: ${COLORS.subtle};
   color: ${COLORS.inkLight};
@@ -107,8 +119,9 @@ const UserSection = styled.div`
   display: flex;
   align-items: center;
   gap: ${SPACING.sm};
-  padding: ${SPACING.xs} ${SPACING.md};
-  border-radius: ${BORDER.radius.md};
+  height: 36px;
+  padding: 0 ${SPACING.sm};
+  border-radius: ${BORDER.radius.sm};
   cursor: pointer;
   transition: background ${TRANSITION.fast};
 
@@ -131,7 +144,7 @@ const UserName = styled.span`
 
 const Divider = styled.div`
   width: 1px;
-  height: 24px;
+  height: 28px;
   background: ${COLORS.subtle};
   margin: 0 ${SPACING.xs};
 `;
@@ -200,11 +213,11 @@ function Header({ toggleAIAssistant, aiAssistantVisible }: HeaderProps) {
         <DateDisplay>
           <DateMain>
             {now.format("MM月DD日")}
-            <span style={{ fontStyle: "italic", color: COLORS.accent }}>
+            <span style={{ marginLeft: SPACING.xs, color: COLORS.accent }}>
               {now.format("dddd")}
             </span>
           </DateMain>
-          <DateSub>{now.format("YYYY")}</DateSub>
+          <DateSub>{now.format("YYYY年")}</DateSub>
         </DateDisplay>
       </LeftSection>
 

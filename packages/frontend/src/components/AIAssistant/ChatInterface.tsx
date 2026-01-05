@@ -185,6 +185,9 @@ const HistoryItemMeta = styled.div`
   display: flex;
   align-items: center;
   gap: ${SPACING.xs};
+  font-family: "Georgia", "Times New Roman", "Times", serif;
+  font-weight: 500;
+  letter-spacing: 0.02em;
 `;
 
 const EmptyHistory = styled.div`
@@ -695,7 +698,7 @@ function AssistantSelect({ noteId }: { noteId?: string }) {
   };
 
   const handleNewChat = async () => {
-    await createConversation(effectiveNoteId);
+    await createConversation(noteId);
     setMenuVisible(false);
   };
 
@@ -899,6 +902,7 @@ function ChatInterface({ noteId }: ChatInterfaceProps) {
     clearSelectedContent,
     currentAssistant,
     currentNoteId, // 🔥 从 AI Store 读取 currentNoteId
+    createConversation, // 🔥 添加 createConversation 方法
   } = useAIStore();
   const [inputValue, setInputValue] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);

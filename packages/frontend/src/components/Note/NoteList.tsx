@@ -279,7 +279,9 @@ const TimeStamp = styled.span`
   display: flex;
   align-items: center;
   gap: 4px;
-  font-family: ${TYPOGRAPHY.fontFamily.mono};
+  font-family: "Georgia", "Times New Roman", "Times", serif;
+  font-weight: 500;
+  letter-spacing: 0.02em;
 `;
 
 const EmptyContainer = styled.div`

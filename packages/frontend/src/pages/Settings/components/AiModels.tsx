@@ -30,6 +30,7 @@ import {
   InfoCircleOutlined,
   GlobalOutlined,
   LockOutlined,
+  SearchOutlined,
 } from "@ant-design/icons";
 import styled, { keyframes } from "styled-components";
 import {
@@ -43,6 +44,7 @@ import {
 import { useModelStore } from "../../../store/modelStore";
 import { ModelConfig } from "../../../types";
 import { db } from "../../../db";
+import { modelsApi } from "../../../lib/api/models";
 
 // ============================================
 // 动画
@@ -270,10 +272,10 @@ const API_TYPE_OPTIONS = [
 ];
 
 const API_ENDPOINT_TEMPLATES: Record<string, string> = {
-  openai: "https://api.openai.com/v1/chat/completions",
-  anthropic: "https://api.anthropic.com/v1/messages",
-  ollama: "http://localhost:11434/api/chat",
-  lmstudio: "http://localhost:1234/v1/chat/completions",
+  openai: "https://api.openai.com/v1",
+  anthropic: "https://api.anthropic.com/v1",
+  ollama: "http://localhost:11434",
+  lmstudio: "http://localhost:1234/v1",
 };
 
 type ViewMode = "list" | "grid";
@@ -297,6 +299,8 @@ export default function AiModels() {
   const [modalVisible, setModalVisible] = useState(false);
   const [editingModel, setEditingModel] = useState<ModelConfig | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("list");
+  const [detectingModels, setDetectingModels] = useState(false);
+  const [detectedModels, setDetectedModels] = useState<string[]>([]);
   const [form] = Form.useForm();
   const { message } = App.useApp();
   const { configs, loadConfigs, updateConfig, deleteConfig, createConfig } =
@@ -311,6 +315,41 @@ export default function AiModels() {
   }, []);
 
   const apiType = Form.useWatch("apiType", form);
+
+  // 当 apiType 变化时，自动设置端点并检测本地模型
+  useEffect(() => {
+    if (!modalVisible || !apiType) return; // 只在模态框打开时响应
+
+    const autoDetect = async () => {
+      if (apiType === "ollama") {
+        const template = API_ENDPOINT_TEMPLATES.ollama;
+        form.setFieldsValue({
+          apiEndpoint: template,
+          temperature: 0.8,
+          maxTokens: 2048,
+        });
+        setDetectedModels([]);
+        // 等待表单更新后自动检测
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        await handleDetectModels();
+      } else if (apiType === "lmstudio") {
+        const template = API_ENDPOINT_TEMPLATES.lmstudio;
+        form.setFieldsValue({
+          apiEndpoint: template,
+          temperature: 0.7,
+          maxTokens: 4096,
+        });
+        setDetectedModels([]);
+        // 等待表单更新后自动检测
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        await handleDetectModels();
+      } else {
+        setDetectedModels([]);
+      }
+    };
+
+    autoDetect();
+  }, [apiType, modalVisible]);
 
   const loadUsageStats = async () => {
     try {
@@ -369,12 +408,59 @@ export default function AiModels() {
       maxTokens: 2000,
       topP: 0.9,
     });
+    setDetectedModels([]);
     setModalVisible(true);
+  };
+
+  // 检测本地模型
+  const handleDetectModels = async () => {
+    const endpoint = form.getFieldValue("apiEndpoint");
+    const currentApiType = form.getFieldValue("apiType"); // 直接从表单获取当前值
+
+    if (!endpoint) {
+      message.warning("请先输入 API 端点");
+      return;
+    }
+
+    if (!currentApiType) {
+      message.warning("请先选择 API 类型");
+      return;
+    }
+
+    setDetectingModels(true);
+    try {
+      console.log("开始检测模型...", { currentApiType, endpoint });
+      const response = await modelsApi.detectModels({
+        apiType: currentApiType,
+        apiEndpoint: endpoint,
+      });
+      const models = response.data?.models || [];
+      console.log("检测到的模型:", models);
+
+      if (models.length === 0) {
+        message.warning("未检测到可用模型，请确认服务已启动");
+        setDetectedModels([]);
+      } else {
+        message.success(`检测到 ${models.length} 个模型`);
+        setDetectedModels(models);
+        // 自动选择第一个模型
+        form.setFieldValue("model", models[0]);
+      }
+    } catch (error: any) {
+      console.error("检测模型失败:", error);
+      const errorMsg =
+        error.response?.data?.error?.message || error.message || "未知错误";
+      message.error(`检测失败: ${errorMsg}`);
+      setDetectedModels([]);
+    } finally {
+      setDetectingModels(false);
+    }
   };
 
   const handleEdit = (model: ModelConfig) => {
     setEditingModel(model);
     form.setFieldsValue(model);
+    setDetectedModels([]); // 清空检测的模型
     setModalVisible(true);
   };
 
@@ -390,6 +476,11 @@ export default function AiModels() {
   const handleSubmit = async (values: any) => {
     setLoading(true);
     try {
+      // 确保 Ollama 和 LM Studio 有空的 apiKey
+      if ((values.apiType === "ollama" || values.apiType === "lmstudio") && !values.apiKey) {
+        values.apiKey = "";
+      }
+
       if (editingModel) {
         await updateConfig(editingModel.id, values);
         message.success("更新成功");
@@ -746,7 +837,22 @@ export default function AiModels() {
           </Form.Item>
 
           <Form.Item
-            label="模型 ID"
+            label={
+              <Space>
+                模型 ID
+                {(apiType === "ollama" || apiType === "lmstudio") && (
+                  <Button
+                    type="link"
+                    size="small"
+                    onClick={handleDetectModels}
+                    loading={detectingModels}
+                    icon={<SearchOutlined />}
+                  >
+                    检测模型
+                  </Button>
+                )}
+              </Space>
+            }
             name="model"
             rules={[{ required: true, message: "请输入模型 ID" }]}
             tooltip={
@@ -761,7 +867,22 @@ export default function AiModels() {
               </Space>
             }
           >
-            <Input placeholder="gpt-3.5-turbo" />
+            {detectedModels.length > 0 ? (
+              <Select
+                placeholder="选择检测到的模型"
+                showSearch
+                allowClear
+                optionFilterProp="children"
+              >
+                {detectedModels.map((model) => (
+                  <Select.Option key={model} value={model}>
+                    {model}
+                  </Select.Option>
+                ))}
+              </Select>
+            ) : (
+              <Input placeholder="gpt-3.5-turbo" />
+            )}
           </Form.Item>
 
           <Row gutter={16}>

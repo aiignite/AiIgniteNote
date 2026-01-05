@@ -56,6 +56,9 @@ const VersionMeta = styled.div`
   gap: 12px;
   font-size: 12px;
   color: rgba(0, 0, 0, 0.45);
+  font-family: "Georgia", "Times New Roman", "Times", serif;
+  font-weight: 500;
+  letter-spacing: 0.02em;
 `;
 
 const VersionContent = styled.div`

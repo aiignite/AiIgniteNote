@@ -15,6 +15,7 @@ import {
   Progress,
   Switch,
   App,
+  Select,
 } from "antd";
 import {
   ApiOutlined,
@@ -24,10 +25,13 @@ import {
   CheckCircleOutlined,
   CloseCircleOutlined,
   DollarOutlined,
+  SearchOutlined,
 } from "@ant-design/icons";
 import { useModelStore } from "../store/modelStore";
 import { ModelConfig } from "../types";
 import dayjs from "dayjs";
+
+const { Option } = Select;
 
 function ModelManagementPage() {
   const { message } = App.useApp();
@@ -37,21 +41,27 @@ function ModelManagementPage() {
     usageLogs,
     quota,
     isLoading,
+    isDetecting,
+    detectedModels,
     loadConfigs,
     loadUsageLogs,
     createConfig,
     updateConfig,
     deleteConfig,
     testConnection,
+    detectModels,
+    clearDetectedModels,
   } = useModelStore();
 
   const [form] = Form.useForm();
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [editingConfig, setEditingConfig] = useState<ModelConfig | null>(null);
   const [testing, setTesting] = useState(false);
+  const [apiType, setApiType] = useState<string>("openai");
 
   useEffect(() => {
     loadConfigs();
+    console.log("ModelManagementPage 组件已加载");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -67,11 +77,104 @@ function ModelManagementPage() {
     if (config) {
       setEditingConfig(config);
       form.setFieldsValue(config);
+      setApiType(config.apiType || "openai");
     } else {
       setEditingConfig(null);
       form.resetFields();
+      setApiType("openai");
     }
+    clearDetectedModels();
     setEditModalVisible(true);
+  };
+
+  // 检测模型
+  const handleDetectModels = async () => {
+    const endpoint = form.getFieldValue("apiEndpoint");
+    const apiKey = form.getFieldValue("apiKey");
+    const currentApiType = form.getFieldValue("apiType"); // 直接从表单获取当前值
+
+    if (!endpoint) {
+      message.warning("请先输入 API 端点");
+      return;
+    }
+
+    if (!currentApiType) {
+      message.warning("请先选择 API 类型");
+      return;
+    }
+
+    console.log("开始检测模型...", { currentApiType, endpoint });
+
+    try {
+      const models = await detectModels(currentApiType, endpoint, apiKey);
+      console.log("检测到的模型:", models);
+
+      if (models.length === 0) {
+        message.warning("未检测到可用模型，请确认服务已启动");
+      } else {
+        message.success(`检测到 ${models.length} 个模型`);
+        // 自动选择第一个模型
+        form.setFieldValue("model", models[0]);
+      }
+    } catch (error: any) {
+      console.error("检测模型失败:", error);
+      const errorMsg =
+        error.response?.data?.error?.message || error.message || "未知错误";
+      message.error(`检测失败: ${errorMsg}`);
+    }
+  };
+
+  // 处理 API 类型变更
+  const handleApiTypeChange = async (value: string) => {
+    console.log("API类型变更:", value);
+    setApiType(value);
+    clearDetectedModels();
+
+    // 设置默认端点和参数（统一使用基础 URL）
+    if (value === "ollama") {
+      form.setFieldsValue({
+        apiEndpoint: "http://localhost:11434",
+        apiKey: "",
+        temperature: 0.8,
+        maxTokens: 2048,
+        topP: 0.9,
+      });
+      // 等待表单更新后再检测
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      handleDetectModels();
+    } else if (value === "lmstudio") {
+      form.setFieldsValue({
+        apiEndpoint: "http://localhost:1234", // 简化，后端会自动处理路径
+        apiKey: "",
+        temperature: 0.7,
+        maxTokens: 4096,
+        topP: 0.95,
+      });
+      // 等待表单更新后再检测
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      handleDetectModels();
+    } else if (value === "openai") {
+      form.setFieldsValue({
+        apiEndpoint: "https://api.openai.com/v1",
+        temperature: 0.7,
+        maxTokens: 4096,
+        topP: 1.0,
+      });
+    } else if (value === "anthropic") {
+      form.setFieldsValue({
+        apiEndpoint: "https://api.anthropic.com/v1",
+        temperature: 0.7,
+        maxTokens: 4096,
+        topP: 1.0,
+      });
+    } else if (value === "glm") {
+      form.setFieldsValue({
+        apiEndpoint: "https://open.bigmodel.cn/api/paas/v4",
+        temperature: 0.7,
+        maxTokens: 2000,
+        topP: 0.9,
+      });
+    }
   };
 
   // 保存配置
@@ -397,7 +500,10 @@ function ModelManagementPage() {
         title={editingConfig ? "编辑配置" : "添加配置"}
         open={editModalVisible}
         onOk={handleSaveConfig}
-        onCancel={() => setEditModalVisible(false)}
+        onCancel={() => {
+          setEditModalVisible(false);
+          clearDetectedModels();
+        }}
         width={600}
       >
         <Form form={form} layout="vertical">
@@ -410,27 +516,113 @@ function ModelManagementPage() {
           </Form.Item>
 
           <Form.Item
+            label="API类型"
+            name="apiType"
+            initialValue="openai"
+            rules={[{ required: true, message: "请选择API类型" }]}
+          >
+            <Select onChange={handleApiTypeChange}>
+              <Option value="openai">OpenAI</Option>
+              <Option value="anthropic">Anthropic</Option>
+              <Option value="ollama">Ollama (本地)</Option>
+              <Option value="lmstudio">LM Studio (本地)</Option>
+              <Option value="glm">智谱 GLM</Option>
+            </Select>
+          </Form.Item>
+
+          <Form.Item
             label="API密钥"
             name="apiKey"
-            rules={[{ required: true, message: "请输入API密钥" }]}
+            rules={
+              apiType === "ollama" || apiType === "lmstudio"
+                ? []
+                : [{ required: true, message: "请输入API密钥" }]
+            }
           >
-            <Input.Password placeholder="请输入API密钥" />
+            <Input.Password
+              placeholder={
+                apiType === "ollama" || apiType === "lmstudio"
+                  ? "本地模型无需密钥"
+                  : "请输入API密钥"
+              }
+            />
           </Form.Item>
 
           <Form.Item
             label="API端点"
             name="apiEndpoint"
             rules={[{ required: true, message: "请输入API端点" }]}
+            extra={
+              <Space style={{ fontSize: 12, color: "#999" }}>
+                <span>
+                  {apiType === "ollama" && "默认: http://localhost:11434"}
+                  {apiType === "lmstudio" && "默认: http://localhost:1234"}
+                  {apiType === "openai" && "OpenAI API 端点"}
+                  {apiType === "anthropic" && "Anthropic API 端点"}
+                  {apiType === "glm" && "智谱 GLM API 端点"}
+                </span>
+                {(apiType === "ollama" || apiType === "lmstudio") && (
+                  <Button
+                    size="small"
+                    type="link"
+                    icon={<SearchOutlined />}
+                    onClick={handleDetectModels}
+                    loading={isDetecting}
+                  >
+                    检测模型
+                  </Button>
+                )}
+              </Space>
+            }
           >
-            <Input placeholder="https://open.bigmodel.cn/api/paas/v4/chat/completions" />
+            <Input
+              placeholder={
+                apiType === "ollama"
+                  ? "http://localhost:11434"
+                  : apiType === "lmstudio"
+                    ? "http://localhost:1234"
+                    : apiType === "openai"
+                      ? "https://api.openai.com/v1"
+                      : apiType === "anthropic"
+                        ? "https://api.anthropic.com/v1"
+                        : apiType === "glm"
+                          ? "https://open.bigmodel.cn/api/paas/v4"
+                          : "https://api.example.com/v1"
+              }
+            />
           </Form.Item>
 
           <Form.Item
             label="模型名称"
             name="model"
-            rules={[{ required: true, message: "请输入模型名称" }]}
+            rules={[{ required: true, message: "请选择或输入模型名称" }]}
           >
-            <Input placeholder="glm-4" />
+            {detectedModels.length > 0 ? (
+              <Select
+                placeholder="选择检测到的模型"
+                showSearch
+                allowClear
+                optionFilterProp="children"
+              >
+                {detectedModels.map((model) => (
+                  <Option key={model} value={model}>
+                    {model}
+                  </Option>
+                ))}
+              </Select>
+            ) : (
+              <Input
+                placeholder={
+                  apiType === "ollama"
+                    ? "例如: llama2"
+                    : apiType === "lmstudio"
+                      ? "例如: gpt-3.5-turbo"
+                      : apiType === "glm"
+                        ? "glm-4"
+                        : "gpt-4"
+                }
+              />
+            )}
           </Form.Item>
 
           <Row gutter={16}>

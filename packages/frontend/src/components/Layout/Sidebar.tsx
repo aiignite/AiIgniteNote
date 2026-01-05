@@ -160,7 +160,10 @@ const StyledSearchInput = styled(Input)`
   border: 1px solid ${COLORS.subtle};
   border-radius: ${BORDER.radius.sm};
   height: 36px;
-  font-size: ${TYPOGRAPHY.fontSize.sm};
+  font-size: 14px;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", "Segoe UI",
+    "Helvetica Neue", Arial, sans-serif;
+  font-weight: 400;
 
   &:hover {
     border-color: ${COLORS.inkLight};
@@ -209,9 +212,9 @@ const NavigationSection = styled.div`
 `;
 
 const SectionLabel = styled.div<{ $collapsed: boolean; $clickable?: boolean }>`
-  font-size: ${TYPOGRAPHY.fontSize.xs};
-  font-weight: ${TYPOGRAPHY.fontWeight.semibold};
-  letter-spacing: ${TYPOGRAPHY.letterSpacing.wider};
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   color: ${COLORS.inkMuted};
   margin-bottom: ${SPACING.sm};
@@ -223,6 +226,8 @@ const SectionLabel = styled.div<{ $collapsed: boolean; $clickable?: boolean }>`
   cursor: ${(props) => (props.$clickable ? "pointer" : "default")};
   user-select: none;
   transition: color ${TRANSITION.fast};
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", "Segoe UI",
+    "Helvetica Neue", Arial, sans-serif;
 
   ${(props) =>
     props.$clickable &&
@@ -261,7 +266,11 @@ const NavItem = styled.div<{
   cursor: pointer;
   transition: all ${TRANSITION.fast};
   color: ${COLORS.inkLight};
-  font-size: ${TYPOGRAPHY.fontSize.sm};
+  font-size: 14px;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", "Segoe UI",
+    "Helvetica Neue", Arial, sans-serif;
+  font-weight: 500;
+  letter-spacing: 0.01em;
   position: relative;
 
   ${(props) =>
@@ -327,7 +336,10 @@ const CollapseButton = styled.button`
   border: none;
   background: transparent;
   color: ${COLORS.inkMuted};
-  font-size: ${TYPOGRAPHY.fontSize.sm};
+  font-size: 13px;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", "Segoe UI",
+    "Helvetica Neue", Arial, sans-serif;
+  font-weight: 500;
   cursor: pointer;
   border-radius: ${BORDER.radius.sm};
   transition: all ${TRANSITION.fast};

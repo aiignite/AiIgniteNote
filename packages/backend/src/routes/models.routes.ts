@@ -2,7 +2,11 @@ import { FastifyInstance } from "fastify";
 import { prisma } from "../utils/prisma.js";
 import { authenticate } from "../middleware/auth.middleware.js";
 import { encrypt, decrypt } from "../utils/encryption.js";
-import { buildUserQuery, canModify, canDelete } from "../utils/permission.helper.js";
+import {
+  buildUserQuery,
+  canModify,
+  canDelete,
+} from "../utils/permission.helper.js";
 
 export default async function modelRoutes(fastify: FastifyInstance) {
   // Get model configs（用户自己的 + 公有的）
@@ -465,6 +469,83 @@ export default async function modelRoutes(fastify: FastifyInstance) {
           totalPages: Math.ceil(total / limit),
         },
       };
+    },
+  );
+
+  // ==================== 本地模型检测和连接测试 ====================
+
+  // 检测本地模型
+  fastify.post(
+    "/configs/detect-models",
+    {
+      onRequest: [authenticate],
+    },
+    async (request, reply) => {
+      const req = request as any;
+      const body = request.body as {
+        apiType: string;
+        apiEndpoint: string;
+        apiKey?: string;
+      };
+
+      try {
+        const { AIService } = await import("../services/ai.service.js");
+        const aiService = new AIService();
+
+        const models = await aiService.detectModels(
+          body.apiType,
+          body.apiEndpoint,
+          body.apiKey,
+        );
+
+        return { models };
+      } catch (error: any) {
+        reply.status(400).send({
+          error: {
+            message: error.message,
+            code: "DETECT_FAILED",
+          },
+        });
+      }
+    },
+  );
+
+  // 测试模型连接
+  fastify.post(
+    "/configs/test-connection",
+    {
+      onRequest: [authenticate],
+    },
+    async (request, reply) => {
+      const req = request as any;
+      const body = request.body as {
+        apiType: string;
+        apiEndpoint: string;
+        apiKey?: string;
+        model: string;
+      };
+
+      try {
+        const { AIService } = await import("../services/ai.service.js");
+        const aiService = new AIService();
+
+        // 构造临时配置进行测试
+        const testConfig = {
+          id: "test",
+          userId: req.userId,
+          ...body,
+        };
+
+        const success = await aiService.testConnection(testConfig);
+        return { success };
+      } catch (error: any) {
+        reply.status(400).send({
+          error: {
+            message: error.message,
+            code: "TEST_FAILED",
+          },
+        });
+      }
     },
   );
 }
