@@ -378,6 +378,8 @@ function NoteEditor({ noteId }: NoteEditorProps) {
               contentLength: note.content?.length || 0,
               loadedContentLength: loadedContent.length,
               loadedContentPreview: loadedContent.substring(0, 200),
+              imageCount: (loadedContent?.match(/<img[^>]+>/g) || []).length,
+              hasBase64Images: loadedContent?.includes('data:image/') || false,
             });
 
             setContent(loadedContent);
@@ -428,6 +430,15 @@ function NoteEditor({ noteId }: NoteEditorProps) {
       // 如果是富文本，将 content 内容保存到 htmlContent
       if (fileType === NoteFileType.RICH_TEXT) {
         updateData.htmlContent = content;
+        
+        // 调试日志：检查保存的内容
+        console.log('[NoteEditor] 保存富文本内容:', {
+          noteId,
+          contentLength: content?.length || 0,
+          hasImages: content?.includes('<img src=') || false,
+          imageCount: (content?.match(/<img[^>]+>/g) || []).length,
+          contentPreview: content?.substring(0, 200) + '...'
+        });
       }
 
       await updateNote(noteId, updateData);
