@@ -337,13 +337,19 @@ function NoteEditor({ noteId }: NoteEditorProps) {
             // 🔥 设置当前笔记 ID 到 AI Store
             setCurrentNoteId(noteId);
             setTitle(note.title);
-            setContent(note.content || "");
             // 从 noteTags 表加载标签关联
             const noteTags = await db.getNoteTags(noteId);
             setTagIds(noteTags.map((t) => t.id));
             setMetadata(note.metadata);
             // 兼容旧数据：没有 fileType 的默认为 markdown
             setFileType(note.fileType || NoteFileType.MARKDOWN);
+
+            // 加载内容：富文本使用 htmlContent，其他使用 content
+            const loadedContent =
+              note.fileType === NoteFileType.RICH_TEXT
+                ? note.htmlContent || note.content || ""
+                : note.content || "";
+            setContent(loadedContent);
 
             // 标记笔记加载完成
             setIsNoteLoaded(true);
@@ -379,13 +385,21 @@ function NoteEditor({ noteId }: NoteEditorProps) {
         .filter((t) => tagIds.includes(t.id))
         .map((t) => t.name);
 
-      await updateNote(noteId, {
+      // 富文本编辑器：保存到 htmlContent 字段
+      const updateData: any = {
         title,
         content,
         tags: tagNames,
         fileType,
         metadata,
-      });
+      };
+
+      // 如果是富文本，将 content 内容保存到 htmlContent
+      if (fileType === NoteFileType.RICH_TEXT) {
+        updateData.htmlContent = content;
+      }
+
+      await updateNote(noteId, updateData);
     } catch (error) {
       console.error("Save failed:", error);
     }
