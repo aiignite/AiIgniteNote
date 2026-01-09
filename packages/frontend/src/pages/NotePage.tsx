@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams } from "react-router-dom";
 import NoteList from "../components/Note/NoteList";
 import NoteEditor from "../components/Note/NoteEditor";
+import WelcomePage from "./WelcomePage";
 import styled from "styled-components";
 import { useFullscreenStore } from "../store/fullscreenStore";
 import { COLORS } from "../styles/design-tokens";
@@ -250,7 +251,11 @@ function NotePage() {
           </div>
         ) : (
           <div style={{ width: "100%", height: "100%" }}>
-            <NoteEditor noteId={selectedNoteId} />
+            {selectedNoteId ? (
+              <NoteEditor noteId={selectedNoteId} />
+            ) : (
+              <WelcomePage />
+            )}
           </div>
         )}
       </PageContainer>
@@ -278,9 +283,13 @@ function NotePage() {
         </ListPanel>
       )}
 
-      {/* 笔记编辑器 */}
+      {/* 笔记编辑器或欢迎页面 */}
       <EditorPanel data-editor-panel="true">
-        <NoteEditor noteId={selectedNoteId} />
+        {selectedNoteId ? (
+          <NoteEditor noteId={selectedNoteId} />
+        ) : (
+          <WelcomePage />
+        )}
       </EditorPanel>
     </PageContainer>
   );
