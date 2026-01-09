@@ -347,18 +347,34 @@ function NoteEditor({ noteId }: NoteEditorProps) {
             // 加载内容：富文本使用 htmlContent，其他使用 content
             // 🔍 调试：检查类型和内容
             const isRichText = note.fileType === NoteFileType.RICH_TEXT || note.fileType === "richtext";
-            const loadedContent = isRichText
-              ? (note.htmlContent || note.content || "")
-              : (note.content || "");
+            const hasHtmlContent = !!note.htmlContent && note.htmlContent.length > 0;
+            const hasContentWithImage = note.content?.includes('<img src=');
+
+            // 优先使用 htmlContent，如果没有但有图片的 content，也使用 content
+            let loadedContent = "";
+            if (isRichText) {
+              if (hasHtmlContent) {
+                loadedContent = note.htmlContent;
+                console.log("[NoteEditor] 使用 htmlContent");
+              } else if (hasContentWithImage) {
+                loadedContent = note.content;
+                console.log("[NoteEditor] htmlContent 为空，但 content 包含图片，使用 content");
+              } else {
+                loadedContent = note.content || "";
+                console.log("[NoteEditor] 使用普通 content");
+              }
+            } else {
+              loadedContent = note.content || "";
+            }
 
             console.log("[NoteEditor] 加载笔记:", {
               noteId,
               fileType: note.fileType,
               fileTypeEnum: NoteFileType.RICH_TEXT,
               isRichText,
-              hasHtmlContent: !!note.htmlContent,
+              hasHtmlContent,
               htmlContentLength: note.htmlContent?.length || 0,
-              hasContent: !!note.content,
+              hasContentWithImage,
               contentLength: note.content?.length || 0,
               loadedContentLength: loadedContent.length,
               loadedContentPreview: loadedContent.substring(0, 200),
