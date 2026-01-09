@@ -146,10 +146,24 @@ function RichTextEditor({
   useEffect(() => {
     if (!editor) return;
 
+    // 🔍 调试日志
+    console.log("[RichTextEditor] content prop 变化:", {
+      contentLength: content?.length || 0,
+      contentPreview: content?.substring(0, 200),
+      hasImage: content?.includes('<img src=') || false,
+    });
+
     // 只有当编辑器内容与 prop 不一致时才更新
     const currentHTML = editor.getHTML();
+    console.log("[RichTextEditor] 编辑器当前内容:", {
+      currentHTMLLength: currentHTML?.length || 0,
+      currentHTMLPreview: currentHTML?.substring(0, 200),
+      isDifferent: content !== currentHTML,
+    });
+
     if (content !== currentHTML) {
       // 使用 commands.setContent 更新编辑器内容（false = 不触发 onUpdate）
+      console.log("[RichTextEditor] 执行 setContent 更新编辑器");
       editor.commands.setContent(content, false);
     }
   }, [content, editor]);

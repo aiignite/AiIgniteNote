@@ -345,10 +345,25 @@ function NoteEditor({ noteId }: NoteEditorProps) {
             setFileType(note.fileType || NoteFileType.MARKDOWN);
 
             // 加载内容：富文本使用 htmlContent，其他使用 content
-            const loadedContent =
-              note.fileType === NoteFileType.RICH_TEXT
-                ? note.htmlContent || note.content || ""
-                : note.content || "";
+            // 🔍 调试：检查类型和内容
+            const isRichText = note.fileType === NoteFileType.RICH_TEXT || note.fileType === "richtext";
+            const loadedContent = isRichText
+              ? (note.htmlContent || note.content || "")
+              : (note.content || "");
+
+            console.log("[NoteEditor] 加载笔记:", {
+              noteId,
+              fileType: note.fileType,
+              fileTypeEnum: NoteFileType.RICH_TEXT,
+              isRichText,
+              hasHtmlContent: !!note.htmlContent,
+              htmlContentLength: note.htmlContent?.length || 0,
+              hasContent: !!note.content,
+              contentLength: note.content?.length || 0,
+              loadedContentLength: loadedContent.length,
+              loadedContentPreview: loadedContent.substring(0, 200),
+            });
+
             setContent(loadedContent);
 
             // 标记笔记加载完成
