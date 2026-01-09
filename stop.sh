@@ -42,20 +42,41 @@ log_step() {
     echo -e "${PURPLE}[STEP]${NC} $1"
 }
 
-# 检查端口是否被占用
+# 检查端口是否被占用 (跨平台)
 check_port() {
     local port=$1
-    if lsof -Pi :$port -sTCP:LISTEN -t >/dev/null 2>&1; then
-        return 0 # 端口被占用
+
+    # Windows (Git Bash/MSYS)
+    if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "win32" ]]; then
+        netstat -ano | findstr ":$port " | findstr "LISTENING" > /dev/null 2>&1
+        return $?
     else
-        return 1 # 端口可用
+        # Linux/Mac
+        if command -v lsof &> /dev/null; then
+            lsof -Pi :$port -sTCP:LISTEN -t >/dev/null 2>&1
+            return $?
+        else
+            netstat -an 2>/dev/null | grep ":$port " | grep "LISTEN" > /dev/null 2>&1
+            return $?
+        fi
     fi
 }
 
-# 获取端口占用的进程 PID
+# 获取端口占用的进程 PID (跨平台)
 get_port_pid() {
     local port=$1
-    lsof -ti :$port
+
+    # Windows (Git Bash/MSYS)
+    if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "win32" ]]; then
+        netstat -ano | findstr ":$port " | findstr "LISTENING" | awk '{print $5}' | head -n 1
+    else
+        # Linux/Mac
+        if command -v lsof &> /dev/null; then
+            lsof -ti :$port
+        else
+            netstat -anp 2>/dev/null | grep ":$port " | grep "LISTEN" | awk '{print $7}' | cut -d'/' -f1
+        fi
+    fi
 }
 
 # 从 PID 文件停止进程

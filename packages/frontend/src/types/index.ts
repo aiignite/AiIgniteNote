@@ -51,6 +51,8 @@ export interface AIMessage {
 export interface AIConversation {
   id: string;
   noteId?: string;
+  userId?: string;
+  assistantId?: string;
   messages: AIMessage[];
   title?: string;
   createdAt: number;

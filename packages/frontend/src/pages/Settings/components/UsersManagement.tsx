@@ -22,6 +22,7 @@ import {
   LockOutlined,
   MailOutlined,
   CheckCircleOutlined,
+  SearchOutlined,
 } from "@ant-design/icons";
 import styled, { keyframes } from "styled-components";
 import {
@@ -32,6 +33,7 @@ import {
   SHADOW,
   TRANSITION,
 } from "../../../styles/design-tokens";
+import { usersApi } from "../../../lib/api/users";
 
 // ============================================
 // 动画
@@ -68,8 +70,8 @@ const HeaderSection = styled.div`
 const PrimaryButton = styled(Button)`
   height: 40px;
   padding: 0 ${SPACING.xl};
-  background: ${COLORS.ink};
-  border-color: ${COLORS.ink};
+  background: ${COLORS.accent};
+  border-color: ${COLORS.accent};
   border-radius: ${BORDER.radius.sm};
   color: ${COLORS.paper};
   font-weight: ${TYPOGRAPHY.fontWeight.medium};
@@ -161,8 +163,8 @@ const StyledTable = styled(Table)`
       }
 
       &.ant-pagination-item-active {
-        background: ${COLORS.ink};
-        border-color: ${COLORS.ink};
+        background: ${COLORS.accent};
+        border-color: ${COLORS.accent};
 
         a {
           color: ${COLORS.paper};
@@ -295,10 +297,15 @@ interface User {
   username?: string;
   displayName?: string;
   avatar?: string;
-  isActive: boolean;
   emailVerified: boolean;
-  lastLoginAt?: string;
+  requirePasswordChange: boolean;
+  isActive: boolean;
   createdAt: string;
+  _count?: {
+    notes: number;
+    categories: number;
+    aiConversations: number;
+  };
 }
 
 // ============================================
@@ -322,44 +329,12 @@ export default function UsersManagement() {
   const loadUsers = async () => {
     setLoading(true);
     try {
-      // 模拟数据
-      setUsers([
-        {
-          id: "1",
-          email: "demo@ainote.com",
-          username: "demo",
-          displayName: "Demo User",
-          isActive: true,
-          emailVerified: true,
-          lastLoginAt: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
-          createdAt: new Date(
-            Date.now() - 30 * 24 * 60 * 60 * 1000,
-          ).toISOString(),
-        },
-        {
-          id: "2",
-          email: "user@example.com",
-          username: "testuser",
-          displayName: "Test User",
-          isActive: true,
-          emailVerified: false,
-          createdAt: new Date(
-            Date.now() - 15 * 24 * 60 * 60 * 1000,
-          ).toISOString(),
-        },
-        {
-          id: "3",
-          email: "inactive@example.com",
-          username: "inactive",
-          displayName: "Inactive User",
-          isActive: false,
-          emailVerified: true,
-          createdAt: new Date(
-            Date.now() - 7 * 24 * 60 * 60 * 1000,
-          ).toISOString(),
-        },
-      ]);
+      const response = await usersApi.getUsers({
+        limit: 100, // 获取前100个用户
+      });
+      setUsers(response.data.users);
     } catch (error) {
+      console.error("Failed to load users:", error);
       message.error("加载用户列表失败");
     } finally {
       setLoading(false);
@@ -389,23 +364,29 @@ export default function UsersManagement() {
 
   const handleToggleStatus = async (user: User) => {
     try {
-      setUsers(
-        users.map((u) =>
-          u.id === user.id ? { ...u, isActive: !u.isActive } : u,
-        ),
-      );
+      await usersApi.toggleUserActive(user.id);
       message.success(`用户已${user.isActive ? "禁用" : "启用"}`);
-    } catch (error) {
-      message.error("操作失败");
+      // 重新加载用户列表
+      await loadUsers();
+    } catch (error: any) {
+      console.error("Toggle status failed:", error);
+      const errorMessage =
+        error.response?.data?.error?.message || "操作失败";
+      message.error(errorMessage);
     }
   };
 
   const handleDelete = async (id: string) => {
     try {
-      setUsers(users.filter((u) => u.id !== id));
+      await usersApi.deleteUser(id);
       message.success("用户已删除");
-    } catch (error) {
-      message.error("删除失败");
+      // 重新加载用户列表
+      await loadUsers();
+    } catch (error: any) {
+      console.error("Delete failed:", error);
+      const errorMessage =
+        error.response?.data?.error?.message || "删除失败";
+      message.error(errorMessage);
     }
   };
 
@@ -413,30 +394,40 @@ export default function UsersManagement() {
     setLoading(true);
     try {
       if (modalType === "create") {
-        const newUser: User = {
-          id: Date.now().toString(),
+        // 调用 API 创建用户
+        await usersApi.createUser({
           email: (values as any).email,
+          password: (values as any).password,
           username: (values as any).username,
           displayName: (values as any).displayName,
-          isActive: (values as any).isActive ?? true,
           emailVerified: (values as any).emailVerified ?? false,
-          createdAt: new Date().toISOString(),
-        };
-        setUsers([...users, newUser]);
+        });
         message.success("用户创建成功");
-      } else if (modalType === "edit") {
-        setUsers(
-          users.map((u) =>
-            u.id === editingUser?.id ? { ...u, ...(values as any) } : u,
-          ),
-        );
+      } else if (modalType === "edit" && editingUser) {
+        // 调用 API 更新用户
+        await usersApi.updateUser(editingUser.id, {
+          username: (values as any).username,
+          displayName: (values as any).displayName,
+          emailVerified: (values as any).emailVerified,
+          requirePasswordChange: (values as any).requirePasswordChange,
+        });
         message.success("用户信息更新成功");
-      } else if (modalType === "password") {
+      } else if (modalType === "password" && editingUser) {
+        // 调用 API 重置密码
+        await usersApi.resetPassword(
+          editingUser.id,
+          (values as any).newPassword
+        );
         message.success("密码已重置");
       }
       setModalVisible(false);
-    } catch (error) {
-      message.error("操作失败");
+      // 重新加载用户列表
+      await loadUsers();
+    } catch (error: any) {
+      console.error("Operation failed:", error);
+      const errorMessage =
+        error.response?.data?.error?.message || "操作失败";
+      message.error(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -639,40 +630,41 @@ export default function UsersManagement() {
           layout="vertical"
           onFinish={handleSubmit}
           initialValues={{
-            isActive: true,
             emailVerified: false,
+            requirePasswordChange: false,
           }}
         >
-          {modalType === "create" && (
-            <>
-              <Form.Item
-                label="邮箱"
-                name="email"
-                rules={[
-                  { required: true, message: "请输入邮箱" },
-                  { type: "email", message: "请输入有效的邮箱地址" },
-                ]}
-              >
-                <StyledInput
-                  prefix={<MailOutlined />}
-                  placeholder="user@example.com"
-                />
-              </Form.Item>
+          {/* 邮箱字段 - 创建时可编辑，编辑时只读 */}
+          <Form.Item
+            label="邮箱"
+            name="email"
+            rules={[
+              { required: modalType === "create", message: "请输入邮箱" },
+              { type: "email", message: "请输入有效的邮箱地址" },
+            ]}
+          >
+            <StyledInput
+              prefix={<MailOutlined />}
+              placeholder="user@example.com"
+              disabled={modalType === "edit"}
+            />
+          </Form.Item>
 
-              <Form.Item
-                label="密码"
-                name="password"
-                rules={[
-                  { required: true, message: "请输入密码" },
-                  { min: 6, message: "密码至少6位" },
-                ]}
-              >
-                <PasswordInput
-                  prefix={<LockOutlined />}
-                  placeholder="至少6位"
-                />
-              </Form.Item>
-            </>
+          {/* 密码字段 - 仅在创建时显示 */}
+          {modalType === "create" && (
+            <Form.Item
+              label="密码"
+              name="password"
+              rules={[
+                { required: true, message: "请输入密码" },
+                { min: 6, message: "密码至少6位" },
+              ]}
+            >
+              <PasswordInput
+                prefix={<LockOutlined />}
+                placeholder="至少6位"
+              />
+            </Form.Item>
           )}
 
           <Form.Item label="用户名" name="username">
@@ -695,8 +687,12 @@ export default function UsersManagement() {
             <StyledSwitch />
           </Form.Item>
 
-          <Form.Item label="账户状态" name="isActive" valuePropName="checked">
-            <StyledSwitch checkedChildren="活跃" unCheckedChildren="禁用" />
+          <Form.Item
+            label="要求修改密码"
+            name="requirePasswordChange"
+            valuePropName="checked"
+          >
+            <StyledSwitch />
           </Form.Item>
 
           <Form.Item style={{ marginBottom: 0 }}>

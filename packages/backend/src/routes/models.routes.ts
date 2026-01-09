@@ -50,6 +50,91 @@ export default async function modelRoutes(fastify: FastifyInstance) {
     },
   );
 
+  // Get single config with API key (for editing)
+  fastify.get(
+    "/configs/:id",
+    {
+      onRequest: [authenticate],
+    },
+    async (request, reply) => {
+      const req = request as any;
+      const { id } = request.params as { id: string };
+
+      const config = await prisma.modelConfig.findUnique({
+        where: { id },
+      });
+
+      if (!config) {
+        reply.status(404).send({
+          error: { message: "Config not found", code: "CONFIG_NOT_FOUND" },
+        });
+        return;
+      }
+
+      // 检查权限：只有创建者可以查看完整配置（包括 API Key）
+      if (config.userId !== req.userId && !config.isPublic) {
+        reply.status(403).send({
+          error: {
+            message: "You don't have permission to view this config",
+            code: "FORBIDDEN",
+          },
+        });
+        return;
+      }
+
+      // 对于公有配置（非创建者），不返回 API Key
+      if (config.isPublic && config.userId !== req.userId) {
+        return {
+          id: config.id,
+          name: config.name,
+          description: config.description,
+          apiEndpoint: config.apiEndpoint,
+          apiType: config.apiType,
+          model: config.model,
+          temperature: config.temperature,
+          maxTokens: config.maxTokens,
+          topP: config.topP,
+          enabled: config.enabled,
+          isDefault: config.isDefault,
+          isPublic: config.isPublic,
+          userId: config.userId,
+          createdAt: config.createdAt,
+          updatedAt: config.updatedAt,
+          // 不返回 apiKey
+        };
+      }
+
+      // 对于创建者，返回解密后的 API Key
+      let decryptedApiKey = "";
+      try {
+        decryptedApiKey = decrypt(config.apiKey);
+      } catch (error) {
+        console.error("Failed to decrypt API key:", error);
+        // 如果解密失败，返回空字符串
+        decryptedApiKey = "";
+      }
+
+      return {
+        id: config.id,
+        name: config.name,
+        description: config.description,
+        apiKey: decryptedApiKey,
+        apiEndpoint: config.apiEndpoint,
+        apiType: config.apiType,
+        model: config.model,
+        temperature: config.temperature,
+        maxTokens: config.maxTokens,
+        topP: config.topP,
+        enabled: config.enabled,
+        isDefault: config.isDefault,
+        isPublic: config.isPublic,
+        userId: config.userId,
+        createdAt: config.createdAt,
+        updatedAt: config.updatedAt,
+      };
+    },
+  );
+
   // Create model config
   fastify.post(
     "/configs",

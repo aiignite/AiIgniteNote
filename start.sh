@@ -45,20 +45,43 @@ log_step() {
     echo -e "${PURPLE}[STEP]${NC} $1"
 }
 
-# 检查端口是否被占用
+# 检查端口是否被占用 (跨平台)
 check_port() {
     local port=$1
-    if lsof -Pi :$port -sTCP:LISTEN -t >/dev/null 2>&1; then
-        return 0 # 端口被占用
+
+    # Windows (Git Bash/MSYS)
+    if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "win32" ]]; then
+        netstat -ano | findstr ":$port " | findstr "LISTENING" > /dev/null 2>&1
+        return $?
     else
-        return 1 # 端口可用
+        # Linux/Mac
+        if command -v lsof &> /dev/null; then
+            lsof -Pi :$port -sTCP:LISTEN -t >/dev/null 2>&1
+            return $?
+        else
+            # 备用方案: 使用 netstat
+            netstat -an 2>/dev/null | grep ":$port " | grep "LISTEN" > /dev/null 2>&1
+            return $?
+        fi
     fi
 }
 
-# 获取端口占用的进程 PID
+# 获取端口占用的进程 PID (跨平台)
 get_port_pid() {
     local port=$1
-    lsof -ti :$port
+
+    # Windows (Git Bash/MSYS)
+    if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "win32" ]]; then
+        netstat -ano | findstr ":$port " | findstr "LISTENING" | awk '{print $5}' | head -n 1
+    else
+        # Linux/Mac
+        if command -v lsof &> /dev/null; then
+            lsof -ti :$port
+        else
+            # 备用方案
+            netstat -anp 2>/dev/null | grep ":$port " | grep "LISTEN" | awk '{print $7}' | cut -d'/' -f1
+        fi
+    fi
 }
 
 # 停止指定端口的进程
@@ -178,9 +201,9 @@ EOF
         log_success "前端 .env 文件已创建"
     fi
 
-    # 启动前端 (后台运行)
+    # 启动前端 (后台运行,监听所有网络接口)
     log_info "启动前端服务器 (端口 $FRONTEND_PORT)..."
-    nohup npm run dev > "$PROJECT_ROOT/logs/frontend.log" 2>&1 &
+    nohup npm run dev -- --host 0.0.0.0 --port $FRONTEND_PORT > "$PROJECT_ROOT/logs/frontend.log" 2>&1 &
     FRONTEND_PID=$!
 
     # 保存 PID
@@ -232,17 +255,41 @@ start_prisma_studio() {
 
 # 显示启动信息
 show_info() {
+    # 获取本机 IP 地址 (跨平台)
+    local LOCAL_IP=""
+    if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "win32" ]]; then
+        # Windows
+        LOCAL_IP=$(ipconfig | findstr "IPv4" | findstr /V "127.0.0.1" | head -n 1 | awk '{print $14}')
+    else
+        # Linux/Mac
+        if command -v hostname &> /dev/null; then
+            LOCAL_IP=$(hostname -I 2>/dev/null | awk '{print $1}')
+        fi
+        if [ -z "$LOCAL_IP" ] && command -v ifconfig &> /dev/null; then
+            LOCAL_IP=$(ifconfig | grep "inet " | grep -v 127.0.0.1 | awk '{print $2}' | head -n 1)
+        fi
+    fi
+
     echo ""
     echo -e "${GREEN}╔════════════════════════════════════════╗${NC}"
     echo -e "${GREEN}║     AiNote 服务启动成功! 🎉           ║${NC}"
     echo -e "${GREEN}╚════════════════════════════════════════╝${NC}"
     echo ""
-    echo -e "${CYAN}📱 前端地址:${NC}     http://localhost:$FRONTEND_PORT"
-    echo -e "${CYAN}🔧 后端地址:${NC}     http://localhost:$BACKEND_PORT"
-    echo -e "${CYAN}📊 API 地址:${NC}     http://localhost:$BACKEND_PORT/api/v1"
-    echo -e "${CYAN}💾 Prisma Studio:${NC} http://localhost:$PRISMA_PORT"
-    echo -e "${CYAN}🗄️  数据库:${NC}       PostgreSQL (localhost:5432/ainote)"
+    echo -e "${CYAN}📱 本地访问:${NC}"
+    echo -e "   前端: ${CYAN}http://localhost:$FRONTEND_PORT${NC}"
+    echo -e "   后端: ${CYAN}http://localhost:$BACKEND_PORT${NC}"
+    echo -e "   API:  ${CYAN}http://localhost:$BACKEND_PORT/api/v1${NC}"
+    echo -e "   Prisma Studio: ${CYAN}http://localhost:$PRISMA_PORT${NC}"
     echo ""
+
+    if [ -n "$LOCAL_IP" ]; then
+        echo -e "${CYAN}🌐 局域网访问:${NC}"
+        echo -e "   前端: ${CYAN}http://$LOCAL_IP:$FRONTEND_PORT${NC}"
+        echo -e "   后端: ${CYAN}http://$LOCAL_IP:$BACKEND_PORT${NC}"
+        echo -e "   API:  ${CYAN}http://$LOCAL_IP:$BACKEND_PORT/api/v1${NC}"
+        echo ""
+    fi
+
     echo -e "${YELLOW}📋 演示账号:${NC}"
     echo -e "   邮箱: ${CYAN}demo@ainote.com${NC}"
     echo -e "   密码: ${CYAN}demo123456${NC}"
@@ -252,7 +299,7 @@ show_info() {
     echo -e "   前端: tail -f logs/frontend.log"
     echo -e "   Prisma: tail -f logs/prisma.log"
     echo ""
-    echo -e "${YELLOW}⏹  停止服务:${NC} ./stop.sh"
+    echo -e "${YELLOW}⏹  停止服务:${NC} ./stop.sh 或 stop.bat (Windows)"
     echo ""
 }
 

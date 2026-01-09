@@ -27,7 +27,22 @@ if (!appConfig.jwtSecret || appConfig.jwtSecret === "change-this-secret") {
   );
 }
 
-if (!appConfig.encryptionKey) {
+// 验证加密密钥
+if (appConfig.encryptionKey) {
+  console.log("🔑 ENCRYPTION_KEY found, length:", appConfig.encryptionKey.length, "characters");
+
+  if (appConfig.encryptionKey.length === 64) {
+    // 验证是否为有效的十六进制
+    const hexRegex = /^[0-9a-fA-F]{64}$/;
+    if (hexRegex.test(appConfig.encryptionKey)) {
+      console.log("✅ ENCRYPTION_KEY format is correct (64 hex characters)");
+    } else {
+      console.warn("⚠️  WARNING: ENCRYPTION_KEY contains invalid characters (should be hex only)");
+    }
+  } else {
+    console.warn("⚠️  WARNING: ENCRYPTION_KEY has wrong length:", appConfig.encryptionKey.length, "(expected 64)");
+  }
+} else {
   console.warn(
     "⚠️  WARNING: ENCRYPTION_KEY not set. API keys will not be encrypted!",
   );

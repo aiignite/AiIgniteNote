@@ -1,6 +1,31 @@
 import axios, { AxiosInstance, InternalAxiosRequestConfig, AxiosResponse } from 'axios';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
+// 自动检测 API Base URL
+function getApiBaseUrl(): string {
+  const envUrl = import.meta.env.VITE_API_BASE_URL;
+
+  // 如果环境变量设置为 'auto' 或未设置，则自动检测
+  if (!envUrl || envUrl === 'auto') {
+    // 获取当前页面的 host 和 port
+    const hostname = window.location.hostname;
+    const protocol = window.location.protocol;
+
+    // 如果是 localhost 或 127.0.0.1，使用默认的 3001 端口
+    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+      return 'http://localhost:3001';
+    }
+
+    // 否则使用当前页面的 hostname，但端口改为 3001
+    return `${protocol}//${hostname}:3001`;
+  }
+
+  // 否则使用环境变量中配置的地址
+  return envUrl;
+}
+
+const API_BASE_URL = getApiBaseUrl();
+
+console.log('API Base URL:', API_BASE_URL);
 
 class ApiClient {
   private client: AxiosInstance;

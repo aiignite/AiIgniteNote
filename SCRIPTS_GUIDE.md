@@ -1,275 +1,307 @@
-# AiNote 启动脚本使用指南
+# AiNote 服务启动脚本使用指南
 
-## 📋 脚本列表
+## 📋 概述
 
-项目根目录下提供了以下管理脚本：
+本项目提供了智能的启动/停止脚本,支持自动检测端口占用、清理进程、局域网访问等功能。
 
-| 脚本文件 | 功能描述 |
-|---------|---------|
-| `start.sh` | 启动后端和前端服务 |
-| `stop.sh` | 停止所有服务 |
-| `restart.sh` | 重启所有服务 |
-| `status.sh` | 查看服务运行状态 |
+## 🎯 支持的平台
+
+- ✅ **Windows** (CMD/BAT)
+- ✅ **Windows** (Git Bash/MSYS)
+- ✅ **Linux**
+- ✅ **macOS**
 
 ## 🚀 快速开始
 
-### 1. 启动服务
+### Windows 用户
+
+#### 方法 1: 使用批处理脚本 (推荐)
+
+```cmd
+# 启动所有服务
+restart.bat
+
+# 或者分别执行
+start.bat  # 启动服务
+stop.bat   # 停止服务
+```
+
+#### 方法 2: 使用 Git Bash
 
 ```bash
-./start.sh
-```
-
-**功能说明：**
-- ✅ 自动检查端口 3001（后端）和 5173（前端）是否被占用
-- ✅ 如果端口被占用，自动停止相关进程
-- ✅ 检查并初始化数据库（如果不存在）
-- ✅ 生成 Prisma Client
-- ✅ 启动后端服务
-- ✅ 启动前端服务
-- ✅ 显示访问地址和演示账号
-
-**输出示例：**
-```
-╔════════════════════════════════════════╗
-║         AiNote 启动脚本 🚀            ║
-╚════════════════════════════════════════╝
-
-[STEP] 检查端口占用情况...
-[SUCCESS] 后端端口 3001 可用
-[SUCCESS] 前端端口 5173 可用
-
-[STEP] 启动后端服务...
-[INFO] 启动后端服务器 (端口 3001)...
-[SUCCESS] 后端服务启动成功 (PID: 12345)
-[INFO] 后端地址: http://localhost:3001
-[INFO] 日志文件: /Users/xxx/AiNote/logs/backend.log
-
-[STEP] 启动前端服务...
-[INFO] 启动前端服务器 (端口 5173)...
-[SUCCESS] 前端服务启动成功 (PID: 12346)
-[INFO] 前端地址: http://localhost:5173
-[INFO] 日志文件: /Users/xxx/AiNote/logs/frontend.log
-
-╔════════════════════════════════════════╗
-║     AiNote 服务启动成功! 🎉           ║
-╚════════════════════════════════════════╝
-
-📱 前端地址:     http://localhost:5173
-🔧 后端地址:     http://localhost:3001
-📊 API 地址:     http://localhost:3001/api/v1
-💾 数据库:       PostgreSQL (localhost:5432/ainote)
-
-📋 演示账号:
-   邮箱: demo@ainote.com
-   密码: demo123456
-
-📝 日志文件:
-   后端: tail -f logs/backend.log
-   前端: tail -f logs/frontend.log
-
-⏹  停止服务: ./stop.sh
-```
-
-### 2. 查看服务状态
-
-```bash
-./status.sh
-```
-
-**显示信息：**
-- 服务运行状态（进程 PID、运行时间）
-- 端口监听状态
-- 后端健康检查结果
-- 日志文件信息（大小、行数）
-- 数据库状态
-
-### 3. 停止服务
-
-```bash
-./stop.sh
-```
-
-**功能说明：**
-- 从 PID 文件读取进程 ID 并停止
-- 通过端口检查并停止残留进程
-- 清理所有相关 Node.js 进程
-
-### 4. 重启服务
-
-```bash
+# 启动所有服务
 ./restart.sh
+
+# 或者分别执行
+./start.sh  # 启动服务
+./stop.sh   # 停止服务
 ```
 
-**功能说明：**
-- 先执行 `stop.sh` 停止服务
-- 等待 2 秒
-- 再执行 `start.sh` 启动服务
-
-## 📁 日志文件
-
-所有日志文件存储在 `logs/` 目录：
-
-| 日志文件 | 说明 |
-|---------|------|
-| `logs/backend.log` | 后端服务日志 |
-| `logs/frontend.log` | 前端服务日志 |
-| `logs/backend.pid` | 后端进程 PID |
-| `logs/frontend.pid` | 前端进程 PID |
-
-### 查看实时日志
+### Linux/macOS 用户
 
 ```bash
-# 查看后端日志
+# 启动所有服务
+./restart.sh
+
+# 或者分别执行
+./start.sh  # 启动服务
+./stop.sh   # 停止服务
+```
+
+## 📦 脚本功能
+
+### restart.bat / restart.sh
+
+一键重启所有服务,自动处理端口占用。
+
+**功能特性:**
+- ✅ 自动检测并停止占用端口的进程
+- ✅ 智能启动后端和前端服务
+- ✅ 自动生成 Prisma Client
+- ✅ 显示本地和局域网访问地址
+- ✅ 彩色日志输出,易于查看
+
+**端口配置:**
+- 后端: `3001`
+- 前端: `3100`
+- Prisma Studio: `5555`
+
+### start.sh
+
+启动所有服务,包含详细的步骤提示。
+
+**启动流程:**
+1. 检查端口占用情况
+2. 清理被占用的端口
+3. 启动后端服务 (端口 3001)
+4. 启动前端服务 (端口 3100, 监听 0.0.0.0)
+5. 启动 Prisma Studio (端口 5555)
+6. 显示访问信息
+
+### stop.sh / stop.bat
+
+停止所有服务,清理相关进程。
+
+**停止流程:**
+1. 从 PID 文件停止服务
+2. 通过端口检查并停止服务
+3. 清理所有相关进程
+4. 删除 PID 文件
+
+## 🌐 局域网访问
+
+脚本会自动显示局域网访问地址,例如:
+
+```
+📱 本地访问:
+   前端: http://localhost:3100
+   后端: http://localhost:3001
+   API:  http://localhost:3001/api/v1
+
+🌐 局域网访问:
+   前端: http://192.168.1.100:3100
+   后端: http://192.168.1.100:3001
+   API:  http://192.168.1.100:3001/api/v1
+```
+
+### Windows 防火墙设置
+
+如果局域网无法访问,需要允许防火墙:
+
+1. 打开 **Windows Defender 防火墙**
+2. 点击 **高级设置**
+3. 点击 **入站规则** → **新建规则**
+4. 选择 **端口** → **TCP**
+5. 输入端口: `3100, 3001`
+6. 选择 **允许连接**
+7. 勾选所有配置文件
+8. 命名规则: `AiNote`
+
+### Linux/macOS 防火墙设置
+
+```bash
+# Ubuntu/Debian (ufw)
+sudo ufw allow 3100/tcp
+sudo ufw allow 3001/tcp
+
+# CentOS/RHEL (firewalld)
+sudo firewall-cmd --add-port=3100/tcp --permanent
+sudo firewall-cmd --add-port=3001/tcp --permanent
+sudo firewall-cmd --reload
+
+# macOS
+sudo /usr/libexec/ApplicationFirewall/socketfilterfw --add /usr/bin/node
+```
+
+## 📝 日志文件
+
+所有服务的日志都保存在 `logs/` 目录:
+
+```
+logs/
+├── backend.log      # 后端服务日志
+├── frontend.log     # 前端服务日志
+├── prisma.log       # Prisma Studio 日志
+├── backend.pid      # 后端进程 PID
+├── frontend.pid     # 前端进程 PID
+└── prisma.pid       # Prisma 进程 PID
+```
+
+### 查看日志
+
+```bash
+# 实时查看后端日志
 tail -f logs/backend.log
 
-# 查看前端日志
+# 实时查看前端日志
 tail -f logs/frontend.log
 
-# 同时查看两个日志
-tail -f logs/backend.log logs/frontend.log
+# Windows PowerShell
+Get-Content logs\backend.log -Wait
+Get-Content logs\frontend.log -Wait
 ```
 
-## 🔧 常见问题
+## 🔧 故障排查
 
-### 端口被占用怎么办？
+### 问题 1: 端口已被占用
 
-`start.sh` 脚本会自动处理端口占用问题，无需手动干预。
-
-如果仍然失败，可以手动停止进程：
-
-```bash
-# 停止后端（端口 3001）
-lsof -ti :3001 | xargs kill -9
-
-# 停止前端（端口 5173）
-lsof -ti :5173 | xargs kill -9
+**错误信息:**
+```
+检测到端口 3001 被占用
 ```
 
-### 数据库丢失怎么办？
+**解决方案:**
+- 脚本会自动停止占用端口的进程
+- 如果自动停止失败,手动执行 `stop.bat` 或 `stop.sh`
+- Windows 用户可以手动停止:
+  ```cmd
+  netstat -ano | findstr :3001
+  taskkill /F /PID <进程ID>
+  ```
 
-重新运行启动脚本，会自动检测并初始化数据库：
+### 问题 2: 数据库连接失败
 
-```bash
-./start.sh
+**错误信息:**
+```
+PostgreSQL数据库未连接
 ```
 
-或手动执行：
+**解决方案:**
+1. 确保 PostgreSQL 服务正在运行
+2. 检查 `packages/backend/.env` 中的数据库配置
+3. 测试数据库连接:
+   ```bash
+   psql -U postgres -h localhost -p 5432 -d ainote
+   ```
 
-```bash
-cd packages/backend
-npm run prisma:migrate
-npm run prisma:seed
-```
+### 问题 3: 局域网无法访问
 
-### 如何查看详细错误信息？
+**解决方案:**
+1. 确保设备和服务器在同一局域网
+2. 检查防火墙设置(见上文)
+3. 确保前端启动时使用了 `--host 0.0.0.0` 参数
+4. 检查后端 `packages/backend/.env` 中的 `CORS_ORIGIN` 配置
 
-查看日志文件：
+### 问题 4: Prisma Client 生成失败
 
-```bash
-# 后端日志
-cat logs/backend.log
-
-# 前端日志
-cat logs/frontend.log
-```
-
-或使用 `./status.sh` 查看服务状态。
-
-## 🎯 开发工作流
-
-### 日常开发
-
-```bash
-# 1. 启动服务
-./start.sh
-
-# 2. 开发中查看状态
-./status.sh
-
-# 3. 如需重启
-./restart.sh
-
-# 4. 结束开发
-./stop.sh
-```
-
-### 仅启动后端
-
+**解决方案:**
 ```bash
 cd packages/backend
-npm run dev
+pnpm prisma generate
+# 或
+npm run prisma:generate
 ```
 
-### 仅启动前端
+## 📋 演示账号
 
+```
+邮箱: demo@ainote.com
+密码: demo123456
+```
+
+## 🎨 自定义配置
+
+### 修改端口
+
+编辑脚本中的端口配置:
+
+**restart.bat / stop.bat:**
+```batch
+set "BACKEND_PORT=3001"
+set "FRONTEND_PORT=3100"
+```
+
+**start.sh / stop.sh:**
 ```bash
-cd packages/frontend
-npm run dev
+BACKEND_PORT=3001
+FRONTEND_PORT=3100
+PRISMA_PORT=5555
 ```
 
-## 📊 端口说明
+同时需要修改:
+- `packages/frontend/.env` 中的 `VITE_API_BASE_URL`
+- `packages/backend/.env` 中的 `PORT` 和 `CORS_ORIGIN`
 
-| 服务 | 端口 | 用途 |
-|------|------|------|
-| 后端 | 3001 | API 服务器 |
-| 前端 | 5173 | Vite 开发服务器 |
+### 修改数据库连接
 
-## 🔐 演示账号
+编辑 `packages/backend/.env`:
 
-```
-邮箱：demo@ainote.com
-密码：demo123456
+```env
+DATABASE_URL="postgresql://user:password@localhost:5432/ainote?schema=public"
 ```
 
-## 📝 注意事项
+## 📞 技术支持
 
-1. **首次运行**：首次运行会自动创建数据库和种子数据
-2. **端口占用**：脚本会自动处理端口占用，无需手动操作
-3. **日志管理**：日志文件会持续增长，定期清理
-4. **进程清理**：使用 `./stop.sh` 确保所有进程被正确停止
+如遇问题,请查看:
+1. 日志文件: `logs/*.log`
+2. 项目文档: `CLAUDE.md`
+3. GitHub Issues
 
-## 🛠️ 技术细节
+## 🔄 自动重启监控
 
-### PID 管理
+`restart.sh` 脚本包含自动监控功能,会定期检查服务状态并在服务异常时自动重启。
 
-脚本使用 PID 文件管理进程：
-- `logs/backend.pid` - 后端进程 ID
-- `logs/frontend.pid` - 前端进程 ID
+**监控间隔:** 10 秒
 
-停止服务时，脚本会：
-1. 读取 PID 文件
-2. 优雅停止进程（SIGTERM）
-3. 等待 2 秒
-4. 如果进程仍在运行，强制停止（SIGKILL）
-5. 删除 PID 文件
+**监控内容:**
+- 后端健康检查 (`/health` 端点)
+- 前端连接状态
 
-### 端口检测
+**停止监控:** 按 `Ctrl+C`
 
-使用 `lsof` 命令检测端口占用：
+## 📌 注意事项
 
-```bash
-lsof -Pi :3001 -sTCP:LISTEN -t
+1. **首次运行前** 确保:
+   - PostgreSQL 数据库已安装并运行
+   - 已执行 `pnpm install` 安装依赖
+   - 已配置 `packages/backend/.env`
+
+2. **Windows 用户**:
+   - 建议使用 Git Bash 或 PowerShell
+   - 确保 `pnpm` 或 `npm` 已添加到 PATH
+
+3. **生产环境**:
+   - 修改默认密码
+   - 使用环境变量管理敏感信息
+   - 配置 HTTPS
+   - 设置反向代理 (Nginx)
+
+## 🎉 完成启动
+
+启动成功后,你应该看到:
+
+```
+╔════════════════════════════════════════╗
+║      AiNote 服务启动成功! 🎉           ║
+╚════════════════════════════════════════╝
+
+📱 本地访问:
+   前端: http://localhost:3100
+   后端: http://localhost:3001
+
+🌐 局域网访问:
+   前端: http://192.168.x.x:3100
+   后端: http://192.168.x.x:3001
 ```
 
-### 健康检查
-
-后端提供健康检查接口：
-
-```bash
-curl http://localhost:3001/health
-```
-
-返回：
-```json
-{
-  "status": "ok",
-  "timestamp": "2024-01-01T00:00:00.000Z"
-}
-```
-
-## 📞 获取帮助
-
-如有问题，请查看：
-- 日志文件：`logs/*.log`
-- 服务状态：`./status.sh`
-- README.md：项目文档
+现在可以在浏览器中访问应用了! 🚀

@@ -868,7 +868,7 @@ export class AIService {
         throw new Error(`Ollama 服务响应错误: ${response.status}`);
       }
 
-      const data = await response.json();
+      const data = await response.json() as { models?: { name: string }[] };
       return data.models?.map((m: any) => m.name) || [];
     } catch (error: any) {
       if (error.name === "AbortError") {
@@ -916,7 +916,7 @@ export class AIService {
         throw new Error(`LM Studio 服务响应错误: ${response.status}`);
       }
 
-      const data = await response.json();
+      const data = await response.json() as { data?: { id: string }[] };
       return data.data?.map((m: any) => m.id) || [];
     } catch (error: any) {
       if (error.name === "AbortError") {

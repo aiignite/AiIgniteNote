@@ -114,8 +114,8 @@ const ActionButton = styled(Button)<{ $primary?: boolean }>`
   ${(props) =>
     props.$primary
       ? `
-    background: ${COLORS.ink};
-    border-color: ${COLORS.ink};
+    background: ${COLORS.accent};
+    border-color: ${COLORS.accent};
     color: ${COLORS.paper};
 
     &:hover {

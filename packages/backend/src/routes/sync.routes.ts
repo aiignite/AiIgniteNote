@@ -1,6 +1,7 @@
 import { FastifyInstance } from "fastify";
 import { prisma } from "../utils/prisma.js";
 import { authenticate } from "../middleware/auth.middleware.js";
+import { canModify } from "../utils/permission.helper.js";
 
 export default async function syncRoutes(fastify: FastifyInstance) {
   // Get sync status

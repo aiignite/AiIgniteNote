@@ -16,6 +16,7 @@ import {
   Switch,
   App,
   Select,
+  message,
 } from "antd";
 import {
   ApiOutlined,
@@ -30,11 +31,12 @@ import {
 import { useModelStore } from "../store/modelStore";
 import { ModelConfig } from "../types";
 import dayjs from "dayjs";
+import { modelsApi } from "../lib/api/models";
 
 const { Option } = Select;
 
 function ModelManagementPage() {
-  const { message } = App.useApp();
+  const { message: messageApi } = App.useApp();
   const {
     configs,
     currentConfig,
@@ -57,6 +59,7 @@ function ModelManagementPage() {
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [editingConfig, setEditingConfig] = useState<ModelConfig | null>(null);
   const [testing, setTesting] = useState(false);
+  const [loadingConfig, setLoadingConfig] = useState(false);
   const [apiType, setApiType] = useState<string>("openai");
 
   useEffect(() => {
@@ -73,12 +76,28 @@ function ModelManagementPage() {
   }, [currentConfig?.id]);
 
   // 打开新建/编辑模态框
-  const handleOpenEditModal = (config?: ModelConfig) => {
+  const handleOpenEditModal = async (config?: ModelConfig) => {
     if (config) {
-      setEditingConfig(config);
-      form.setFieldsValue(config);
-      setApiType(config.apiType || "openai");
+      // 编辑模式：先从服务器获取完整配置（包括 API Key）
+      setLoadingConfig(true);
+      try {
+        const response = await modelsApi.getConfigWithKey(config.id);
+        const fullConfig = response.data;
+        setEditingConfig(fullConfig);
+        form.setFieldsValue(fullConfig);
+        setApiType(fullConfig.apiType || "openai");
+      } catch (error) {
+        console.error("Failed to load config:", error);
+        messageApi.error("加载配置失败");
+        // 如果加载失败，使用本地配置
+        setEditingConfig(config);
+        form.setFieldsValue(config);
+        setApiType(config.apiType || "openai");
+      } finally {
+        setLoadingConfig(false);
+      }
     } else {
+      // 新建模式
       setEditingConfig(null);
       form.resetFields();
       setApiType("openai");
@@ -94,12 +113,12 @@ function ModelManagementPage() {
     const currentApiType = form.getFieldValue("apiType"); // 直接从表单获取当前值
 
     if (!endpoint) {
-      message.warning("请先输入 API 端点");
+      messageApi.warning("请先输入 API 端点");
       return;
     }
 
     if (!currentApiType) {
-      message.warning("请先选择 API 类型");
+      messageApi.warning("请先选择 API 类型");
       return;
     }
 
@@ -110,9 +129,9 @@ function ModelManagementPage() {
       console.log("检测到的模型:", models);
 
       if (models.length === 0) {
-        message.warning("未检测到可用模型，请确认服务已启动");
+        messageApi.warning("未检测到可用模型，请确认服务已启动");
       } else {
-        message.success(`检测到 ${models.length} 个模型`);
+        messageApi.success(`检测到 ${models.length} 个模型`);
         // 自动选择第一个模型
         form.setFieldValue("model", models[0]);
       }
@@ -120,7 +139,7 @@ function ModelManagementPage() {
       console.error("检测模型失败:", error);
       const errorMsg =
         error.response?.data?.error?.message || error.message || "未知错误";
-      message.error(`检测失败: ${errorMsg}`);
+      messageApi.error(`检测失败: ${errorMsg}`);
     }
   };
 
@@ -184,19 +203,19 @@ function ModelManagementPage() {
 
       if (editingConfig) {
         await updateConfig(editingConfig.id, values);
-        message.success("配置更新成功");
+        messageApi.success("配置更新成功");
       } else {
         await createConfig({
           ...values,
           enabled: false,
         });
-        message.success("配置创建成功");
+        messageApi.success("配置创建成功");
       }
 
       setEditModalVisible(false);
       loadConfigs();
     } catch (error) {
-      message.error("操作失败");
+      messageApi.error("操作失败");
     }
   };
 
@@ -210,10 +229,10 @@ function ModelManagementPage() {
       onOk: async () => {
         try {
           await deleteConfig(config.id);
-          message.success("删除成功");
+          messageApi.success("删除成功");
           loadConfigs();
         } catch (error) {
-          message.error("删除失败");
+          messageApi.error("删除失败");
         }
       },
     });
@@ -232,10 +251,10 @@ function ModelManagementPage() {
       }
 
       await updateConfig(config.id, { enabled });
-      message.success(enabled ? "已启用" : "已禁用");
+      messageApi.success(enabled ? "已启用" : "已禁用");
       loadConfigs();
     } catch (error) {
-      message.error("操作失败");
+      messageApi.error("操作失败");
     }
   };
 
@@ -243,14 +262,17 @@ function ModelManagementPage() {
   const handleTestConnection = async (config: ModelConfig) => {
     setTesting(true);
     try {
-      const success = await testConnection(config);
+      // 需要获取完整配置（包括 API Key）
+      const response = await modelsApi.getConfigWithKey(config.id);
+      const fullConfig = response.data;
+      const success = await testConnection(fullConfig);
       if (success) {
-        message.success("连接测试成功");
+        messageApi.success("连接测试成功");
       } else {
-        message.error("连接测试失败");
+        messageApi.error("连接测试失败");
       }
     } catch (error) {
-      message.error("连接测试失败");
+      messageApi.error("连接测试失败");
     } finally {
       setTesting(false);
     }
@@ -505,6 +527,7 @@ function ModelManagementPage() {
           clearDetectedModels();
         }}
         width={600}
+        confirmLoading={loadingConfig}
       >
         <Form form={form} layout="vertical">
           <Form.Item
@@ -524,8 +547,8 @@ function ModelManagementPage() {
             <Select onChange={handleApiTypeChange}>
               <Option value="openai">OpenAI</Option>
               <Option value="anthropic">Anthropic</Option>
-              <Option value="ollama">Ollama (本地)</Option>
-              <Option value="lmstudio">LM Studio (本地)</Option>
+              <Option value="ollama">Ollama</Option>
+              <Option value="lmstudio">LM Studio</Option>
               <Option value="glm">智谱 GLM</Option>
             </Select>
           </Form.Item>
@@ -603,10 +626,13 @@ function ModelManagementPage() {
                 showSearch
                 allowClear
                 optionFilterProp="children"
+                optionLabelProp="label"
               >
                 {detectedModels.map((model) => (
-                  <Option key={model} value={model}>
-                    {model}
+                  <Option key={model} value={model} label={model}>
+                    <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={model}>
+                      {model}
+                    </div>
                   </Option>
                 ))}
               </Select>

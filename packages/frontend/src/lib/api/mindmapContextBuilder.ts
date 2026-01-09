@@ -66,25 +66,11 @@ export async function isMindMapNote(noteId?: string): Promise<boolean> {
 export async function getMindMapData(noteId: string): Promise<any | null> {
   try {
     const note = await db.notes.get(noteId);
-    if (!note) {
-      console.warn("[getMindMapData] 笔记不存在:", noteId);
+    if (!note?.metadata?.mindmapData) {
       return null;
     }
 
-    // 优先从 metadata.mindmapData 获取
-    if (note.metadata?.mindmapData) {
-      console.log("[getMindMapData] 从 metadata.mindmapData 获取数据");
-      return JSON.parse(note.metadata.mindmapData);
-    }
-
-    // 降级：从 content 获取
-    if (note.content) {
-      console.log("[getMindMapData] 从 content 获取数据");
-      return JSON.parse(note.content);
-    }
-
-    console.warn("[getMindMapData] 未找到思维导图数据");
-    return null;
+    return JSON.parse(note.metadata.mindmapData);
   } catch (error) {
     console.error("[getMindMapData] 获取失败:", error);
     return null;
@@ -195,15 +181,13 @@ export async function buildMindMapContext(
     dataHash: string;
   };
 }> {
-  console.log("[MindMapContext] 开始构建思维导图上下文");
-  console.log("[MindMapContext] noteId:", noteId);
-  console.log("[MindMapContext] userMessage:", userMessage);
+  console.log("[MindMapContext] 开始构建思维导图上下文, noteId:", noteId);
 
   // 1. 获取最新思维导图数据
   const mindmapData = await getMindMapData(noteId);
 
   if (!mindmapData) {
-    console.warn("[MindMapContext] ❌ 未找到思维导图数据,使用降级方案");
+    console.warn("[MindMapContext] 未找到思维导图数据,使用普通模式");
     return buildFallbackContext(systemPrompt, userMessage, conversation);
   }
 
@@ -223,36 +207,13 @@ export async function buildMindMapContext(
   // 4. 根据大小选择策略
   if (jsonTokens < MINDMAP_CONTEXT_CONFIG.SMALL_FILE_THRESHOLD) {
     console.log("[MindMapContext] 使用小文件策略");
-    return buildSmallFileContext(
-      mindmapData,
-      jsonStr,
-      jsonTokens,
-      systemPrompt,
-      userMessage,
-      conversation,
-      maxTokens,
-      { nodeCount, depth, dataHash },
-    );
+    return buildSmallFileContext(mindmapData, jsonStr, jsonTokens, systemPrompt, userMessage, conversation, maxTokens, { nodeCount, depth, dataHash });
   } else if (jsonTokens < MINDMAP_CONTEXT_CONFIG.LARGE_FILE_THRESHOLD) {
     console.log("[MindMapContext] 使用大文件策略");
-    return buildLargeFileContext(
-      mindmapData,
-      jsonStr,
-      jsonTokens,
-      systemPrompt,
-      userMessage,
-      maxTokens,
-      { nodeCount, depth, dataHash },
-    );
+    return buildLargeFileContext(mindmapData, jsonStr, jsonTokens, systemPrompt, userMessage, maxTokens, { nodeCount, depth, dataHash });
   } else {
     console.log("[MindMapContext] 使用超大文件策略(摘要模式)");
-    return buildSummaryContext(
-      mindmapData,
-      systemPrompt,
-      userMessage,
-      maxTokens,
-      { nodeCount, depth, dataHash },
-    );
+    return buildSummaryContext(mindmapData, systemPrompt, userMessage, maxTokens, { nodeCount, depth, dataHash });
   }
 }
 

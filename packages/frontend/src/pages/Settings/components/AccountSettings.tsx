@@ -3,6 +3,8 @@ import { Form, Input, Button, message, Modal } from "antd";
 import { UserOutlined, LockOutlined, MailOutlined } from "@ant-design/icons";
 import styled from "styled-components";
 import { useAuthStore } from "../../../store/authStore";
+import { authApi } from "../../../lib/api/auth";
+import { validatePassword } from "../../../utils/passwordValidation";
 import {
   COLORS,
   TYPOGRAPHY,
@@ -251,12 +253,35 @@ export default function AccountSettings() {
     };
     setLoading(true);
     try {
-      // TODO: 调用修改密码 API
-      console.log("Changing password:", { currentPassword, newPassword });
-      message.success("密码修改成功");
+      // 验证密码
+      const validation = validatePassword(newPassword);
+      if (!validation.isValid) {
+        message.error(validation.errors[0]);
+        setLoading(false);
+        return;
+      }
+
+      // 检查是否与默认密码相同
+      if (newPassword === 'seeyao123') {
+        message.error('密码不能与默认密码相同');
+        setLoading(false);
+        return;
+      }
+
+      // 调用修改密码 API
+      await authApi.changePassword({ currentPassword, newPassword });
+      message.success("密码修改成功，请重新登录");
+
       setPasswordModalVisible(false);
-    } catch (error) {
-      message.error("密码修改失败");
+
+      // 延迟2秒后跳转到登录页
+      setTimeout(() => {
+        localStorage.removeItem('auth_storage');
+        window.location.href = '/login';
+      }, 2000);
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.error?.message || '密码修改失败';
+      message.error(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -348,8 +373,21 @@ export default function AccountSettings() {
             name="newPassword"
             rules={[
               { required: true, message: "请输入新密码" },
-              { min: 6, message: "密码至少6位" },
+              { min: 8, message: "密码至少8位" },
+              {
+                pattern: /[A-Z]/,
+                message: "密码必须包含至少一个大写字母",
+              },
+              {
+                pattern: /[a-z]/,
+                message: "密码必须包含至少一个小写字母",
+              },
+              {
+                pattern: /[0-9]/,
+                message: "密码必须包含至少一个数字",
+              },
             ]}
+            extra="密码必须至少8位，包含大写字母、小写字母和数字"
           >
             <PasswordInput placeholder="新密码" />
           </Form.Item>

@@ -9,6 +9,7 @@ export const modelsApi = {
     description?: string;
     apiKey: string;
     apiEndpoint: string;
+    apiType?: string;
     model: string;
     temperature?: number;
     maxTokens?: number;
@@ -22,16 +23,21 @@ export const modelsApi = {
       description?: string;
       apiKey?: string;
       apiEndpoint?: string;
+      apiType?: string;
       model?: string;
       temperature?: number;
       maxTokens?: number;
       topP?: number;
       enabled?: boolean;
       isDefault?: boolean;
+      isPublic?: boolean;
     },
   ) => apiClient.put(`/models/configs/${id}`, data),
 
   deleteConfig: (id: string) => apiClient.delete(`/models/configs/${id}`),
+
+  // Get single config with API key (for editing)
+  getConfigWithKey: (id: string) => apiClient.get(`/models/configs/${id}`),
 
   // Detect local models
   detectModels: (params: {

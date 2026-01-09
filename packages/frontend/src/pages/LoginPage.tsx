@@ -10,6 +10,7 @@ import styled, { keyframes, css } from "styled-components";
 import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "../store/authStore";
 import { BrandLogo } from "../components/BrandLogo";
+import ChangePasswordModal from "../components/ChangePasswordModal";
 
 // ============================================
 // ANIMATIONS
@@ -135,7 +136,7 @@ const MainTitle = styled.h1`
   }
 `;
 
-const EditorialSubtitle = styled.p`
+const EditorialSubtitle = styled.div`
   font-size: 18px;
   line-height: 1.6;
   color: ${COLORS.inkLight};
@@ -571,6 +572,8 @@ export default function LoginPage() {
   const [mode, setMode] = useState("login");
   const [loading, setLoading] = useState(false);
   const [shake, setShake] = useState(false);
+  const [showChangePassword, setShowChangePassword] = useState(false);
+  const [loginForm] = Form.useForm();
   const navigate = useNavigate();
   const { message: messageApi } = App.useApp();
   const login = useAuthStore((state) => state.login);
@@ -580,12 +583,18 @@ export default function LoginPage() {
     setLoading(true);
     try {
       const { email, password } = values as { email: string; password: string };
+
+      // 检查是否使用默认密码
+      if (password === "seeyao123") {
+        // 先登录，然后提示修改密码
+        await login(email, password);
+        messageApi.warning("检测到您正在使用默认密码，请修改密码");
+        setShowChangePassword(true);
+        setLoading(false);
+        return;
+      }
+
       await login(email, password);
-      const currentState = useAuthStore.getState();
-      console.log(
-        "Login successful, isAuthenticated:",
-        currentState.isAuthenticated,
-      );
       messageApi.success("欢迎回来！");
       // 直接导航，isAuthenticated 在内存中已更新
       navigate("/notes");
@@ -597,6 +606,15 @@ export default function LoginPage() {
       messageApi.error(msg);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleChangePasswordConfirm = (newPassword?: string) => {
+    setShowChangePassword(false);
+    // 密码修改成功后，用户已被登出，保持在登录页面
+    // 如果有新密码，填充到登录表单中
+    if (newPassword) {
+      loginForm.setFieldsValue({ password: newPassword });
     }
   };
 
@@ -704,6 +722,7 @@ export default function LoginPage() {
 
           {mode === "login" ? (
             <StyledForm
+              form={loginForm}
               name="login"
               onFinish={handleLogin}
               $shake={shake}
@@ -867,6 +886,12 @@ export default function LoginPage() {
           )}
         </FormPanel>
       </PageWrapper>
+
+      {/* 修改密码模态框 */}
+      <ChangePasswordModal
+        visible={showChangePassword}
+        onConfirm={handleChangePasswordConfirm}
+      />
     </>
   );
 }

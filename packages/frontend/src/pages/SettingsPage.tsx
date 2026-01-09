@@ -168,7 +168,7 @@ const MenuItem = styled.button<{ $active: boolean }>`
   ${(props) =>
     props.$active &&
     `
-    background: ${COLORS.ink};
+    background: ${COLORS.accent};
     font-weight: ${TYPOGRAPHY.fontWeight.medium};
 
     &::before {
@@ -179,13 +179,13 @@ const MenuItem = styled.button<{ $active: boolean }>`
       transform: translateY(-50%);
       width: 3px;
       height: 20px;
-      background: ${COLORS.accent};
+      background: ${COLORS.accentHover};
       border-radius: 0 ${BORDER.radius.sm} ${BORDER.radius.sm} 0;
     }
   `}
 
   &:hover {
-    background: ${(props) => (props.$active ? COLORS.ink : COLORS.subtleLight)};
+    background: ${(props) => (props.$active ? COLORS.accent : COLORS.subtleLight)};
     color: ${COLORS.ink};
   }
 

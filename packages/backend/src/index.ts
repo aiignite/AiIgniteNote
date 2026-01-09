@@ -10,9 +10,31 @@ const fastify = Fastify({
   },
 });
 
-// Register CORS
+// Register CORS - 支持多个来源
+const allowedOrigins = [
+  config.corsOrigin, // 从环境变量读取的默认值
+  "http://localhost:3100",
+  "http://localhost:5173",
+  "http://127.0.0.1:3100",
+  "http://127.0.0.1:5173",
+  // 局域网访问
+  "http://172.16.17.66:3100",
+  "http://192.168.201.97:3100",
+  "http://172.21.208.1:3100",
+  "http://172.30.224.1:3100",
+];
+
 await fastify.register(cors, {
-  origin: config.corsOrigin,
+  origin: (origin, callback) => {
+    // 允许没有 origin 的请求（比如移动应用、Postman 等）
+    if (!origin) return callback(null, true);
+
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      callback(new Error("Not allowed by CORS"), false);
+    }
+  },
   credentials: true,
 });
 

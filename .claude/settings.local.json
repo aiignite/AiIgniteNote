@@ -1,0 +1,28 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pnpm install)",
+      "Bash(npm install)",
+      "Bash(npm install:*)",
+      "Bash(npx prisma generate:*)",
+      "Bash(npm run prisma:generate:*)",
+      "Bash(npx prisma@5.20.0 generate:*)",
+      "Bash(pnpm approve-builds:*)",
+      "Bash(pnpm run prisma:generate:*)",
+      "Bash(pnpm run prisma:migrate:*)",
+      "Bash(pnpm run prisma:seed:*)",
+      "Bash(pnpm build:*)",
+      "Bash(./start.sh)",
+      "Bash(pnpm dev)",
+      "Bash(netstat:*)",
+      "Bash(findstr:*)",
+      "Bash(taskkill:*)",
+      "Bash(timeout /t 5)",
+      "Bash(curl:*)",
+      "Bash(timeout /t 3)",
+      "Bash(ipconfig:*)",
+      "Bash(npx prisma db seed:*)",
+      "Bash(npx tsx:*)"
+    ]
+  }
+}
