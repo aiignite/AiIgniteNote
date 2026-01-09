@@ -15,6 +15,7 @@ import {
   ArrowRightOutlined,
 } from "@ant-design/icons";
 import styled, { keyframes } from "styled-components";
+import BrandLogo from "../components/BrandLogo/BrandLogo";
 import {
   COLORS,
   TYPOGRAPHY,
@@ -92,6 +93,23 @@ const HeaderSection = styled.div`
     background: ${COLORS.accent};
     opacity: 0.3;
     border-radius: 2px;
+  }
+`;
+
+const WelcomeTitle = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: ${SPACING.md};
+  margin-bottom: ${SPACING.md};
+  
+  .welcome-text {
+    font-family: Georgia, serif;
+    font-size: clamp(32px, 4vw, 48px);
+    font-weight: 400;
+    color: ${COLORS.ink};
+    letter-spacing: -0.02em;
+    line-height: 1.2;
   }
 `;
 
@@ -361,9 +379,10 @@ function WelcomePage() {
     <WelcomeContainer>
       {/* 头部区域 */}
       <HeaderSection>
-        <StyledTitle level={1}>
-          欢迎使用 <span className="highlight">AiNote</span>
-        </StyledTitle>
+        <WelcomeTitle>
+          <span className="welcome-text">欢迎使用</span>
+          <BrandLogo size="large" />
+        </WelcomeTitle>
         <Subtitle>
           智能笔记应用，支持多种编辑器与 AI 深度集成
         </Subtitle>
