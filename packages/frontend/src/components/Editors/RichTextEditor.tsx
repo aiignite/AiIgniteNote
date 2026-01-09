@@ -26,7 +26,6 @@ import { useState, useCallback, useEffect } from "react";
 import styled from "styled-components";
 import type { EditorProps } from "./BaseEditor";
 import { useAIStore } from "../../store/aiStore";
-import { NoteFileType } from "../../types";
 
 const EditorWrapper = styled.div`
   height: 100%;
@@ -142,6 +141,18 @@ function RichTextEditor({
       onChange(editor.getHTML());
     },
   });
+
+  // 🔥 关键修复：当 content prop 变化时更新编辑器内容
+  useEffect(() => {
+    if (!editor) return;
+
+    // 只有当编辑器内容与 prop 不一致时才更新
+    const currentHTML = editor.getHTML();
+    if (content !== currentHTML) {
+      // 使用 commands.setContent 更新编辑器内容（false = 不触发 onUpdate）
+      editor.commands.setContent(content, false);
+    }
+  }, [content, editor]);
 
   // 监听富文本编辑器的选择变化
   useEffect(() => {
