@@ -83,19 +83,21 @@ const ViewToggle = styled(Segmented)`
   }
 `;
 
-const CardGrid = styled(List)`
+const CardGrid = styled.div`
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-  gap: ${SPACING.md};
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: ${SPACING.lg};
+  align-items: start;
 `;
 
 const StyledCard = styled(Card)`
-  height: 100%;
   border: 1px solid ${COLORS.subtle};
   border-radius: ${BORDER.radius.md};
   transition: all ${TRANSITION.fast};
   animation: ${fadeIn} 0.3s ease-out;
   background: ${COLORS.paper};
+  display: flex;
+  flex-direction: column;
 
   &:hover {
     border-color: ${COLORS.inkLight};
@@ -104,18 +106,21 @@ const StyledCard = styled(Card)`
   }
 
   .ant-card-body {
-    padding: ${SPACING.lg};
-    height: calc(100% - 1px);
+    padding: ${SPACING.md};
+    flex: 1;
+    overflow-y: auto;
+    max-height: 400px;
   }
 
   .ant-card-actions {
     background: ${COLORS.background};
+    flex-shrink: 0;
     > li {
       margin: 0;
 
       > span {
-        padding: ${SPACING.sm} 0;
-        font-size: ${TYPOGRAPHY.fontSize.sm};
+        padding: 4px 0;
+        font-size: 11px;
         color: ${COLORS.inkLight};
         transition: color ${TRANSITION.fast};
 
@@ -128,54 +133,55 @@ const StyledCard = styled(Card)`
 `;
 
 const Avatar = styled.div<{ $gradient?: string }>`
-  width: 56px;
-  height: 56px;
-  border-radius: ${BORDER.radius.lg};
+  width: 44px;
+  height: 44px;
+  border-radius: ${BORDER.radius.md};
   background: ${(props) =>
     props.$gradient || `linear-gradient(135deg, #667eea 0%, #764ba2 100%)`};
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 28px;
-  margin-bottom: ${SPACING.md};
+  font-size: 22px;
+  margin-bottom: ${SPACING.sm};
   box-shadow: ${SHADOW.sm};
 `;
 
 const AssistantTitle = styled.div`
   font-family: ${TYPOGRAPHY.fontFamily.display};
-  font-size: ${TYPOGRAPHY.fontSize.lg};
+  font-size: ${TYPOGRAPHY.fontSize.md};
   font-weight: ${TYPOGRAPHY.fontWeight.semibold};
   color: ${COLORS.ink};
-  margin-bottom: ${SPACING.xs};
+  margin-bottom: 4px;
 `;
 
 const AssistantDescription = styled.div`
-  font-size: ${TYPOGRAPHY.fontSize.sm};
+  font-size: ${TYPOGRAPHY.fontSize.xs};
   color: ${COLORS.inkLight};
-  margin-bottom: ${SPACING.md};
-  line-height: 1.5;
-  min-height: 40px;
+  margin-bottom: ${SPACING.sm};
+  line-height: 1.4;
+  min-height: 34px;
 `;
 
 const PromptPreview = styled.div`
   background: ${COLORS.background};
   border: 1px solid ${COLORS.subtle};
   border-radius: ${BORDER.radius.sm};
-  padding: ${SPACING.sm};
-  margin-top: ${SPACING.md};
-  font-size: ${TYPOGRAPHY.fontSize.xs};
+  padding: 6px;
+  margin-top: ${SPACING.sm};
+  font-size: 11px;
   color: ${COLORS.inkLight};
   overflow: hidden;
   text-overflow: ellipsis;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
+  line-height: 1.4;
 `;
 
 const StyledTag = styled(Tag)`
-  font-size: ${TYPOGRAPHY.fontSize.xs};
+  font-size: 11px;
   border-radius: ${BORDER.radius.full};
-  padding: 2px ${SPACING.sm};
+  padding: 1px 6px;
   margin: 0;
 `;
 
@@ -292,6 +298,16 @@ export default function AiAssistants() {
     updateAssistant,
     deleteAssistant,
   } = useAIStore();
+
+  // 根据模型 ID 获取模型名称
+  const getModelName = (modelId: string) => {
+    const config = configs.find((c) => c.id === modelId);
+    if (config) {
+      return config.name;
+    }
+    // 如果找不到配置，返回模型 ID 本身
+    return modelId;
+  };
 
   useEffect(() => {
     loadAssistantsData();
@@ -464,13 +480,14 @@ export default function AiAssistants() {
     const gradient = AVATAR_GRADIENTS[assistant.id] || AVATAR_GRADIENTS.general;
 
     return (
-      <List.Item key={assistant.id} style={{ margin: 0, border: "none" }}>
+      <div key={assistant.id}>
         <StyledCard
           actions={[
             <Button
               key="copy"
               type="text"
               size="small"
+              style={{ fontSize: 11, padding: '2px 4px', height: 'auto' }}
               icon={<CopyOutlined />}
               onClick={() => handleCopy(assistant)}
             >
@@ -480,6 +497,7 @@ export default function AiAssistants() {
               key="edit"
               type="text"
               size="small"
+              style={{ fontSize: 11, padding: '2px 4px', height: 'auto' }}
               icon={<EditOutlined />}
               onClick={() => handleEdit(assistant)}
             >
@@ -497,6 +515,7 @@ export default function AiAssistants() {
                   type="text"
                   size="small"
                   danger
+                  style={{ fontSize: 11, padding: '2px 4px', height: 'auto' }}
                   icon={<DeleteOutlined />}
                 >
                   删除
@@ -510,7 +529,7 @@ export default function AiAssistants() {
           </Avatar>
           <AssistantTitle>{assistant.name}</AssistantTitle>
           <AssistantDescription>{assistant.description}</AssistantDescription>
-          <Space size={4} wrap>
+          <Space size={2} wrap>
             {assistant.isPublic && assistant.userId !== user?.id && (
               <StyledTag color="blue" icon={<CheckCircleOutlined />}>
                 公共
@@ -521,11 +540,11 @@ export default function AiAssistants() {
                 启用
               </StyledTag>
             )}
-            <StyledTag>{assistant.model}</StyledTag>
+            <StyledTag>{getModelName(assistant.model)}</StyledTag>
           </Space>
           <PromptPreview>{assistant.systemPrompt}</PromptPreview>
         </StyledCard>
-      </List.Item>
+      </div>
     );
   };
 
@@ -551,6 +570,7 @@ export default function AiAssistants() {
                 启用
               </StyledTag>
             )}
+            <StyledTag>{getModelName(assistant.model)}</StyledTag>
             <span>{assistant.description}</span>
           </ListItemMeta>
           <PromptPreview style={{ marginTop: 8 }}>
@@ -609,12 +629,9 @@ export default function AiAssistants() {
       </Header>
 
       {viewMode === "grid" ? (
-        <CardGrid
-          dataSource={assistants}
-          renderItem={(item: unknown) =>
-            renderAssistantCard(item as AIAssistant)
-          }
-        />
+        <CardGrid>
+          {assistants.map((assistant) => renderAssistantCard(assistant))}
+        </CardGrid>
       ) : (
         <div>
           {assistants.length === 0 ? (

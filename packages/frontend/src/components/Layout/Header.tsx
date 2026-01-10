@@ -103,14 +103,14 @@ const ActionButton = styled(Button)<{ $active?: boolean }>`
 `;
 
 const AIButton = styled(ActionButton)<{ $active: boolean }>`
-  background: ${(props) => (props.$active ? COLORS.ink : "transparent")};
-  border-color: ${(props) => (props.$active ? COLORS.ink : COLORS.subtle)};
+  background: ${(props) => (props.$active ? COLORS.accent : "transparent")};
+  border-color: ${(props) => (props.$active ? COLORS.accent : COLORS.subtle)};
   color: ${(props) => (props.$active ? COLORS.paper : COLORS.inkLight)};
 
   &:hover {
     background: ${(props) =>
-      props.$active ? COLORS.accent : COLORS.subtleLight};
-    border-color: ${(props) => (props.$active ? COLORS.accent : COLORS.ink)};
+      props.$active ? COLORS.accentHover : COLORS.subtleLight};
+    border-color: ${(props) => (props.$active ? COLORS.accentHover : COLORS.ink)};
     color: ${(props) => (props.$active ? COLORS.paper : COLORS.ink)};
   }
 `;

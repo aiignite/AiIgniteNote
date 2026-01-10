@@ -7,7 +7,7 @@ import React, {
   forwardRef,
 } from "react";
 import { Button, Drawer } from "antd";
-import { CloseOutlined, ThunderboltOutlined } from "@ant-design/icons";
+import { CloseOutlined, RobotOutlined } from "@ant-design/icons";
 import ChatInterface from "./ChatInterface";
 import { useAIStore } from "../../store/aiStore";
 import styled, { keyframes } from "styled-components";
@@ -90,7 +90,7 @@ const SidebarIcon = styled.div`
   display: flex;
   align-items: center;
   justify-content: center;
-  background: ${COLORS.ink};
+  background: ${COLORS.accent};
   color: ${COLORS.paper};
   border-radius: ${BORDER.radius.md};
   font-size: ${TYPOGRAPHY.fontSize.md};
@@ -127,7 +127,7 @@ const SidebarContent = styled.div`
 `;
 
 const MIN_WIDTH = 300;
-const MAX_WIDTH = 600;
+const MAX_WIDTH = 800;
 
 // ============================================
 // Types & Ref
@@ -228,7 +228,7 @@ function AIAssistantSidebar(
                 fontSize: TYPOGRAPHY.fontSize.sm,
               }}
             >
-              <ThunderboltOutlined />
+              <RobotOutlined />
             </SidebarIcon>
             <SidebarName>AI 助手</SidebarName>
           </div>
@@ -269,19 +269,9 @@ function AIAssistantSidebar(
         <SidebarHeader>
           <SidebarTitle>
             <SidebarIcon>
-              <ThunderboltOutlined />
+              <RobotOutlined />
             </SidebarIcon>
             <SidebarName>AI 助手</SidebarName>
-            <span
-              style={{
-                fontSize: TYPOGRAPHY.fontSize.xs,
-                color: COLORS.inkMuted,
-                fontWeight: TYPOGRAPHY.fontWeight.normal,
-                fontFamily: TYPOGRAPHY.fontFamily.mono,
-              }}
-            >
-              {width}px
-            </span>
           </SidebarTitle>
           <CloseButton icon={<CloseOutlined />} onClick={onClose} />
         </SidebarHeader>

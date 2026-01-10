@@ -4,10 +4,12 @@ import { Outlet, useLocation } from "react-router-dom";
 import Sidebar from "./Sidebar";
 import Header from "./Header";
 import AIAssistantSidebar from "../AIAssistant/AIAssistantSidebar";
+import FirstTimePasswordModal from "../Settings/FirstTimePasswordModal";
 import { useNoteStore } from "../../store/noteStore";
 import { useModelStore } from "../../store/modelStore";
 import { useFullscreenStore } from "../../store/fullscreenStore";
 import { useAIStore } from "../../store/aiStore";
+import { useAuthStore } from "../../store/authStore";
 import { initializeDatabase } from "../../db";
 import { useGlobalKeyboardShortcuts } from "../../hooks/useKeyboardShortcuts";
 import styled, { keyframes } from "styled-components";
@@ -173,9 +175,11 @@ const AIWrapper = styled.div<{ $visible: boolean }>`
 function MainLayout() {
   const location = useLocation();
   const { isFullscreen } = useFullscreenStore();
+  const { user } = useAuthStore();
   const [aiAssistantVisible, setAiAssistantVisible] = useState(true);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [aiAssistantWidth, setAiAssistantWidth] = useState(380);
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
   const { loadNotes, loadCategories } = useNoteStore();
   const { loadConfigs } = useModelStore();
   const { loadAssistants } = useAIStore();
@@ -213,6 +217,18 @@ function MainLayout() {
     };
     init();
   }, [loadNotes, loadCategories, loadConfigs, loadAssistants]);
+
+  // 检查是否需要显示修改密码弹窗（仅在用户登录且不在设置页面时显示）
+  useEffect(() => {
+    if (user && !location.pathname.startsWith('/settings')) {
+      // 延迟1秒显示弹窗，避免干扰用户
+      const timer = setTimeout(() => {
+        setShowPasswordModal(true);
+      }, 1000);
+
+      return () => clearTimeout(timer);
+    }
+  }, [user, location.pathname]);
 
   // 监听窗口大小变化
   useEffect(() => {
@@ -284,6 +300,14 @@ function MainLayout() {
           </AIWrapper>
         )}
       </MainGrid>
+
+      {/* 首次登录修改密码弹窗 */}
+      {showPasswordModal && (
+        <FirstTimePasswordModal
+          isOpen={showPasswordModal}
+          onClose={() => setShowPasswordModal(false)}
+        />
+      )}
     </LayoutContainer>
   );
 }

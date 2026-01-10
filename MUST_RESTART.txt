@@ -1,0 +1,109 @@
+🔴 🔴 🔴 重要提示:必须重启后端服务! 🔴 🔴 🔴
+
+## 问题现状
+
+❌ 新建的模型配置无法保存到 PostgreSQL 数据库
+❌ 后端 API 返回错误: "Invalid key length"
+✅ .env 文件中的 ENCRYPTION_KEY 已更新为正确的 64 位十六进制字符
+✅ 加密测试通过
+
+## 根本原因
+
+Node.js 在启动时读取 .env 文件,运行时不会自动重新加载环境变量。
+后端进程仍在使用旧的(错误的)加密密钥: "your-32-character-encryption-key" (32字符)
+
+## ✅ 解决方案
+
+### 方法 1: 使用强制重启脚本 (推荐)
+
+```cmd
+force-restart.bat
+```
+
+这个脚本会:
+1. ✅ 强制停止所有 Node 进程
+2. ✅ 验证端口已释放
+3. ✅ 重新启动后端服务
+4. ✅ 显示加密密钥验证信息
+
+### 方法 2: 手动重启
+
+```cmd
+# 1. 停止后端
+# 在后端窗口按 Ctrl+C
+# 或者运行: stop.bat
+
+# 2. 确认进程已停止
+tasklist | findstr node
+
+# 3. 重新启动
+cd packages\backend
+npm run dev
+```
+
+### 方法 3: 使用批处理脚本
+
+```cmd
+stop.bat
+timeout /t 2
+restart.bat
+```
+
+## 🔍 验证重启是否成功
+
+重启后,后端窗口应该显示:
+
+```
+🔑 ENCRYPTION_KEY found, length: 64 characters
+✅ ENCRYPTION_KEY format is correct (64 hex characters)
+🚀 Server ready at http://0.0.0.0:3001
+```
+
+如果看到上述信息,说明重启成功!
+
+## 🧪 最终测试
+
+1. **运行诊断脚本**
+   ```cmd
+   node check-backend-status.js
+   ```
+
+   应该看到:
+   ```
+   4️⃣ 测试模型创建 API...
+   ✅ 模型创建成功!
+      ID: cmxxxx
+      名称: 测试模型-xxxxx
+   ```
+
+2. **在浏览器中测试**
+   - 打开 http://localhost:3100
+   - 登录: demo@ainote.com / demo123456
+   - 进入模型管理页面
+   - 创建新模型配置
+   - **刷新页面**
+   - 确认配置仍然存在 ✅
+
+## 📋 已完成的修复
+
+1. ✅ 更新 `packages/backend/.env` 中的 ENCRYPTION_KEY
+2. ✅ 更新 `packages/backend/.env.example` 添加说明
+3. ✅ 添加详细错误日志到 `encryption.ts`
+4. ✅ 添加启动时密钥验证到 `config.ts`
+5. ✅ 添加调试日志到 `modelStore.ts`
+6. ✅ 修复 AI API 的 URL 检测逻辑
+7. ✅ 创建诊断脚本 `check-backend-status.js`
+8. ✅ 创建强制重启脚本 `force-restart.bat`
+
+## 📚 相关文档
+
+- `FIX_MODEL_STORAGE.md` - 问题详细分析
+- `RESTART_BACKEND.md` - 重启步骤说明
+- `check-backend-status.js` - 诊断工具
+- `force-restart.bat` - 强制重启脚本
+
+---
+
+**⚠️ 最后提醒: 必须重启后端服务才能使用新的加密密钥!**
+
+立即执行: **force-restart.bat** 🚀

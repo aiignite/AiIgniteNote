@@ -13,10 +13,11 @@ import {
   CloseOutlined,
   DeleteOutlined,
   InfoCircleOutlined,
+  DownOutlined,
 } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
 import { useAIStore } from "../../store/aiStore";
-import { AIConversation } from "../../types";
+import { AIConversation, AIMessage } from "../../types";
 import styled, { keyframes, css } from "styled-components";
 import MarkdownRenderer from "./MarkdownRenderer";
 import AssistantEditModal, { AIAssistant } from "./AssistantEditModal";
@@ -311,8 +312,8 @@ const MessageAvatar = styled.div<{ $isUser: boolean }>`
   color: ${(props) => (props.$isUser ? COLORS.paper : COLORS.aiPrimary)};
 `;
 
-const MessageBubble = styled.div<{ $isUser: boolean }>`
-  max-width: 80%;
+const MessageBubble = styled.div<{ $isUser: boolean; $codeOnly?: boolean }>`
+  max-width: calc(100% - 40px);
   padding: ${SPACING.sm} ${SPACING.md};
   border-radius: ${BORDER.radius.md};
   background: ${(props) =>
@@ -322,11 +323,42 @@ const MessageBubble = styled.div<{ $isUser: boolean }>`
   line-height: ${TYPOGRAPHY.lineHeight.normal};
   position: relative;
   font-size: ${TYPOGRAPHY.fontSize.sm};
+  overflow-wrap: break-word;
 
   ${(props) =>
     !props.$isUser &&
     css`
       border-top-left-radius: 2px;
+
+      /* 如果只包含代码块，占满可用宽度 */
+      ${props.$codeOnly &&
+      css`
+        width: calc(100% - 40px);
+        max-width: calc(100% - 40px);
+      `}
+
+      /* 确保内容不会超出 */
+      table, img {
+        max-width: 100%;
+        overflow-x: auto;
+      }
+
+      /* 代码块不限制宽度，允许横向滚动 */
+      pre {
+        max-width: none;
+        width: 100%;
+        overflow-x: auto;
+        margin-left: -${SPACING.md};
+        margin-right: -${SPACING.md};
+        padding-left: ${SPACING.md};
+        padding-right: ${SPACING.md};
+
+        code {
+          display: block;
+          overflow-x: auto;
+          min-width: 100%;
+        }
+      }
     `}
 
   ${(props) =>
@@ -628,6 +660,26 @@ const StreamingIndicator = styled.div`
   color: ${COLORS.inkMuted};
 `;
 
+// 新增：滚动到底部按钮
+const ScrollToBottomButton = styled(Button)<{ $visible: boolean }>`
+  position: absolute;
+  bottom: 80px;
+  right: 24px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: ${(props) => (props.$visible ? "flex" : "none")};
+  align-items: center;
+  justify-content: center;
+  box-shadow: ${SHADOW.md};
+  z-index: 100;
+  transition: all ${TRANSITION.fast};
+
+  &:hover {
+    transform: scale(1.1);
+  }
+`;
+
 const StreamingDot = styled.span`
   width: 4px;
   height: 4px;
@@ -646,11 +698,48 @@ function CopyButton({ content }: { content: string }) {
 
   const handleCopy = async () => {
     try {
+      console.log("尝试复制内容:", content);
+      
+      if (!content || content.trim() === "") {
+        console.error("复制失败: 内容为空");
+        return;
+      }
+
+      if (!navigator.clipboard) {
+        console.error("复制失败: 浏览器不支持 clipboard API");
+        // 降级方案：使用传统的复制方法
+        const textArea = document.createElement("textarea");
+        textArea.value = content;
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand("copy");
+        document.body.removeChild(textArea);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+        return;
+      }
+
       await navigator.clipboard.writeText(content);
+      console.log("复制成功");
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch (err) {
       console.error("复制失败:", err);
+      
+      // 降级方案：使用传统的复制方法
+      try {
+        const textArea = document.createElement("textarea");
+        textArea.value = content;
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand("copy");
+        document.body.removeChild(textArea);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+        console.log("使用降级方案复制成功");
+      } catch (fallbackErr) {
+        console.error("降级方案也失败:", fallbackErr);
+      }
     }
   };
 
@@ -906,8 +995,10 @@ function ChatInterface({ noteId }: ChatInterfaceProps) {
   } = useAIStore();
   const [inputValue, setInputValue] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
   const [abortController, setAbortController] =
     useState<AbortController | null>(null);
+  const [autoScroll, setAutoScroll] = useState(true); // 控制是否自动滚动
 
   // 🔥 优先使用 AI Store 的 currentNoteId，其次使用传入的 noteId（从 URL）
   const effectiveNoteId = currentNoteId || noteId;
@@ -919,10 +1010,52 @@ function ChatInterface({ noteId }: ChatInterfaceProps) {
     console.log("[ChatInterface] effectiveNoteId:", effectiveNoteId);
   }, [noteId, currentNoteId, effectiveNoteId]);
 
-  // 自动滚动到底部
+  // 检测用户是否手动滚动
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [currentConversation?.messages, currentResponse]);
+    const container = messagesContainerRef.current;
+    if (!container) return;
+
+    let isUserScrolling = false;
+    let scrollTimeout: NodeJS.Timeout;
+
+    const handleScroll = () => {
+      const { scrollTop, scrollHeight, clientHeight } = container;
+      const isAtBottom = scrollHeight - scrollTop - clientHeight < 100;
+
+      // 标记用户正在滚动
+      isUserScrolling = true;
+
+      // 清除之前的超时
+      clearTimeout(scrollTimeout);
+
+      // 500ms 后重置滚动状态
+      scrollTimeout = setTimeout(() => {
+        isUserScrolling = false;
+      }, 500);
+
+      // 如果用户向上滚动且不在底部，停止自动滚动
+      if (!isAtBottom && autoScroll) {
+        setAutoScroll(false);
+      }
+      // 如果用户滚动到底部，恢复自动滚动
+      else if (isAtBottom && !autoScroll) {
+        setAutoScroll(true);
+      }
+    };
+
+    container.addEventListener("scroll", handleScroll);
+    return () => {
+      container.removeEventListener("scroll", handleScroll);
+      clearTimeout(scrollTimeout);
+    };
+  }, [autoScroll]);
+
+  // 智能滚动到底部
+  useEffect(() => {
+    if (autoScroll) {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [currentConversation?.messages, currentResponse, autoScroll]);
 
   // 当有选中内容时，自动添加到输入框
   useEffect(() => {
@@ -1027,6 +1160,15 @@ function ChatInterface({ noteId }: ChatInterfaceProps) {
     return <MarkdownRenderer content={content} />;
   };
 
+  // 检测内容是否只包含代码块
+  const isCodeOnlyContent = (content: string): boolean => {
+    const trimmed = content.trim();
+    // 匹配以 ``` 开始和结束的代码块（可能包含语言标识）
+    const codeBlockRegex = /^```\w*\n[\s\S]*?\n```$/;
+    // 去除首尾空白后，匹配整个内容是否是一个代码块
+    return codeBlockRegex.test(trimmed);
+  };
+
   // 根据当前助手生成建议
   const getSuggestions = () => {
     switch (currentAssistant.id) {
@@ -1056,7 +1198,15 @@ function ChatInterface({ noteId }: ChatInterfaceProps) {
       </InputContainer>
 
       {/* 消息列表 */}
-      <MessagesContainer>
+      <MessagesContainer ref={messagesContainerRef}>
+        {/* 滚动到底部按钮 */}
+        <ScrollToBottomButton
+          $visible={!autoScroll}
+          type="primary"
+          icon={<DownOutlined />}
+          onClick={() => setAutoScroll(true)}
+          title="回到最新消息"
+        />
         {currentConversation?.messages.length === 0 ? (
           <EmptyState>
             <EmptyIcon>{currentAssistant.avatar}</EmptyIcon>
@@ -1084,7 +1234,10 @@ function ChatInterface({ noteId }: ChatInterfaceProps) {
                     </MessageAvatar>
                   )}
                   <div>
-                    <MessageBubble $isUser={msg.role === "user"}>
+                    <MessageBubble
+                      $isUser={msg.role === "user"}
+                      $codeOnly={msg.role === "assistant" && isCodeOnlyContent(msg.content)}
+                    >
                       <MessageContent $isUser={msg.role === "user"}>
                         {renderMessageContent(msg.content, msg.role === "user")}
                       </MessageContent>
@@ -1112,7 +1265,10 @@ function ChatInterface({ noteId }: ChatInterfaceProps) {
                     <RobotOutlined />
                   </MessageAvatar>
                   <div>
-                    <MessageBubble $isUser={false}>
+                    <MessageBubble
+                      $isUser={false}
+                      $codeOnly={isCodeOnlyContent(currentResponse)}
+                    >
                       <MessageContent $isUser={false}>
                         <MarkdownRenderer content={currentResponse} />
                       </MessageContent>

@@ -22,16 +22,33 @@ AiNote 是一个基于 React + TypeScript 的现代化 AI 智能笔记应用，�
 # 安装依赖（使用 pnpm）
 pnpm install
 
-# 启动所有开发服务（前端+后端）
+# Windows 快速启动（推荐）
+restart.bat
+
+# Linux/Mac 快速启动
 ./start.sh
 
 # 或分别启动
-pnpm dev              # 前端 (localhost:5173)
+pnpm dev              # 前端 (localhost:3100)
 pnpm dev:backend       # 后端 (localhost:3001)
 
 # 停止所有服务
-./stop.sh
+# Windows: stop.bat
+# Linux/Mac: ./stop.sh
 ```
+
+### 访问地址
+
+#### 本地访问
+- **前端**: http://localhost:3100
+- **后端 API**: http://localhost:3001/api/v1
+- **Prisma Studio**: http://localhost:5555
+
+#### 局域网访问
+- **前端**: http://192.168.201.97:3100
+- **后端 API**: http://192.168.201.97:3001/api/v1
+
+> **注意**: 局域网 IP 地址可能因网络环境变化而改变，请使用 `ipconfig` (Windows) 或 `ifconfig` (Linux/Mac) 查看当前 IP。
 
 ### 构建
 ```bash

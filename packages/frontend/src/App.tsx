@@ -11,6 +11,7 @@ const NotePage = lazy(() => import("./pages/NotePage"));
 const RecycleBinPage = lazy(() => import("./pages/RecycleBinPage"));
 const SettingsPage = lazy(() => import("./pages/SettingsPage"));
 const ModelManagementPage = lazy(() => import("./pages/ModelManagementPage"));
+const HelpPage = lazy(() => import("./pages/HelpPage"));
 
 // 加载组件
 function PageLoader() {
@@ -116,6 +117,18 @@ function App() {
           }
         >
           <Route index element={<ModelManagementPage />} />
+        </Route>
+
+        {/* 帮助页面 */}
+        <Route
+          path="/help"
+          element={
+            <ProtectedRoute>
+              <MainLayout />
+            </ProtectedRoute>
+          }
+        >
+          <Route index element={<HelpPage />} />
         </Route>
 
         {/* 404页面 */}

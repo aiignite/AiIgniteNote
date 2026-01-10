@@ -26,7 +26,6 @@ import { useState, useCallback, useEffect } from "react";
 import styled from "styled-components";
 import type { EditorProps } from "./BaseEditor";
 import { useAIStore } from "../../store/aiStore";
-import { NoteFileType } from "../../types";
 
 const EditorWrapper = styled.div`
   height: 100%;
@@ -67,6 +66,21 @@ const EditorContentWrapper = styled.div`
     height: auto;
     border-radius: 4px;
     margin: 16px 0;
+    display: block;
+  }
+
+  .ProseMirror img.rich-text-image {
+    max-width: 100%;
+    height: auto;
+    border-radius: 8px;
+    margin: 16px 0;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    cursor: pointer;
+    transition: transform 0.2s ease;
+  }
+
+  .ProseMirror img.rich-text-image:hover {
+    transform: scale(1.02);
   }
 
   .ProseMirror a {
@@ -129,7 +143,13 @@ function RichTextEditor({
       LinkExtension.configure({
         openOnClick: false,
       }),
-      ImageExtension,
+      ImageExtension.configure({
+        inline: false,
+        allowBase64: true,
+        HTMLAttributes: {
+          class: 'rich-text-image',
+        },
+      }),
       TextAlignExtension.configure({
         types: ["heading", "paragraph"],
       }),
@@ -142,6 +162,32 @@ function RichTextEditor({
       onChange(editor.getHTML());
     },
   });
+
+  // 🔥 关键修复：当 content prop 变化时更新编辑器内容
+  useEffect(() => {
+    if (!editor) return;
+
+    // 🔍 调试日志
+    console.log("[RichTextEditor] content prop 变化:", {
+      contentLength: content?.length || 0,
+      contentPreview: content?.substring(0, 200),
+      hasImage: content?.includes('<img src=') || false,
+    });
+
+    // 只有当编辑器内容与 prop 不一致时才更新
+    const currentHTML = editor.getHTML();
+    console.log("[RichTextEditor] 编辑器当前内容:", {
+      currentHTMLLength: currentHTML?.length || 0,
+      currentHTMLPreview: currentHTML?.substring(0, 200),
+      isDifferent: content !== currentHTML,
+    });
+
+    if (content !== currentHTML) {
+      // 使用 commands.setContent 更新编辑器内容（false = 不触发 onUpdate）
+      console.log("[RichTextEditor] 执行 setContent 更新编辑器");
+      editor.commands.setContent(content, false);
+    }
+  }, [content, editor]);
 
   // 监听富文本编辑器的选择变化
   useEffect(() => {
@@ -192,12 +238,49 @@ function RichTextEditor({
   const handleImageUpload = useCallback(
     async (file: File) => {
       try {
+        // 验证文件类型
+        if (!file.type.startsWith('image/')) {
+          message.error('请选择图片文件');
+          return;
+        }
+
+        // 验证文件大小 (10MB)
+        const maxSize = 10 * 1024 * 1024;
+        if (file.size > maxSize) {
+          message.error('图片文件不能超过10MB');
+          return;
+        }
+
         const reader = new FileReader();
         reader.onload = () => {
           const base64 = reader.result as string;
-          editor?.chain().focus().setImage({ src: base64 }).run();
+          
+          // 验证 Base64 数据
+          if (!base64 || !base64.startsWith('data:image/')) {
+            message.error('图片格式不正确');
+            return;
+          }
+
+          console.log('[RichTextEditor] 插入图片:', {
+            fileName: file.name,
+            fileSize: file.size,
+            base64Length: base64.length,
+            base64Preview: base64.substring(0, 100) + '...'
+          });
+
+          editor?.chain().focus().setImage({ 
+            src: base64,
+            alt: file.name,
+            title: file.name
+          }).run();
           message.success("图片上传成功");
         };
+        
+        reader.onerror = () => {
+          console.error('图片读取失败');
+          message.error("图片读取失败");
+        };
+        
         reader.readAsDataURL(file);
       } catch (error) {
         console.error("图片上传失败:", error);

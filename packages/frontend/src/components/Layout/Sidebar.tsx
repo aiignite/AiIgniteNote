@@ -17,6 +17,7 @@ import {
   CodeOutlined,
   CaretRightOutlined,
   CaretDownOutlined,
+  QuestionCircleOutlined,
 } from "@ant-design/icons";
 import type { MenuProps } from "antd";
 import { useNavigate, useLocation } from "react-router-dom";
@@ -107,8 +108,8 @@ const ActionSection = styled.div<{ $collapsed: boolean }>`
 const CreateButton = styled(Button)<{ $collapsed: boolean }>`
   height: 40px;
   width: ${(props) => (props.$collapsed ? "40px" : "100%")};
-  background: ${COLORS.ink};
-  border-color: ${COLORS.ink};
+  background: ${COLORS.accent};
+  border-color: ${COLORS.accent};
   border-radius: ${BORDER.radius.sm};
   color: ${COLORS.paper};
   font-weight: ${TYPOGRAPHY.fontWeight.medium};
@@ -118,8 +119,8 @@ const CreateButton = styled(Button)<{ $collapsed: boolean }>`
   transition: all ${TRANSITION.normal};
 
   &:hover {
-    background: ${COLORS.accent};
-    border-color: ${COLORS.accent};
+    background: ${COLORS.accentHover};
+    border-color: ${COLORS.accentHover};
     transform: translateY(-1px);
     box-shadow: ${SHADOW.accent};
   }
@@ -276,7 +277,7 @@ const NavItem = styled.div<{
   ${(props) =>
     props.$active &&
     css`
-      background: ${COLORS.ink};
+      background: ${COLORS.accent};
       color: ${COLORS.paper};
       font-weight: ${TYPOGRAPHY.fontWeight.medium};
 
@@ -288,13 +289,13 @@ const NavItem = styled.div<{
         transform: translateY(-50%);
         width: 3px;
         height: 24px;
-        background: ${COLORS.accent};
+        background: ${COLORS.accentHover};
         border-radius: 0 ${BORDER.radius.sm} ${BORDER.radius.sm} 0;
       }
     `}
 
   &:hover {
-    background: ${(props) => (props.$active ? COLORS.ink : COLORS.subtleLight)};
+    background: ${(props) => (props.$active ? COLORS.accent : COLORS.subtleLight)};
     color: ${(props) => (props.$active ? COLORS.paper : COLORS.ink)};
     font-weight: ${TYPOGRAPHY.fontWeight.medium};
   }
@@ -517,6 +518,7 @@ function Sidebar({ collapsed, onCollapse }: SidebarProps) {
   // 底部导航项
   const bottomNavItems = [
     { path: "/settings", icon: <SettingOutlined />, label: "设置" },
+    { path: "/help", icon: <QuestionCircleOutlined />, label: "帮助" },
     { path: "/trash", icon: <DeleteOutlined />, label: "回收站" },
   ];
 

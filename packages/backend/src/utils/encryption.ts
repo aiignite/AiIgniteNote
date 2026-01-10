@@ -7,7 +7,21 @@ function getKey(): Buffer {
   if (!config.encryptionKey) {
     throw new Error("ENCRYPTION_KEY not configured");
   }
-  return Buffer.from(config.encryptionKey, "hex");
+
+  try {
+    const key = Buffer.from(config.encryptionKey, "hex");
+
+    if (key.length !== 32) {
+      console.error("❌ Invalid ENCRYPTION_KEY length:", config.encryptionKey.length, "characters (expected 64 hex characters)");
+      console.error("   ENCRYPTION_KEY value:", config.encryptionKey.substring(0, 20) + "...");
+      throw new Error(`Invalid key length: ${key.length} bytes (expected 32 bytes)`);
+    }
+
+    return key;
+  } catch (error) {
+    console.error("❌ Failed to parse ENCRYPTION_KEY:", error);
+    throw error;
+  }
 }
 
 export function encrypt(text: string): string {

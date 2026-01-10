@@ -86,86 +86,17 @@ export class AiNoteDatabase extends Dexie {
       })
       .upgrade(async (tx) => {
         // 数据迁移：初始化默认 AI 助手
-        const defaultAssistants: LocalAIAssistant[] = [
-          {
-            id: "general",
-            name: "通用助手",
-            description: "处理各种通用问答和任务",
-            systemPrompt:
-              "你是一个有用的AI助手，可以帮助用户完成各种任务。请用简洁、准确的方式回答问题。",
-            avatar: "🤖",
-            model: "",
-            isBuiltIn: true,
-            isActive: true,
-            sortOrder: 1,
-            createdAt: Date.now(),
-            updatedAt: Date.now(),
-          },
-          {
-            id: "translator",
-            name: "翻译专家",
-            description: "专业的多语言翻译助手",
-            systemPrompt:
-              "你是一个专业的翻译助手。当用户提供文本时，请将其翻译成目标语言。如果用户没有指定目标语言，默认翻译成中文。请保持原文的语气和格式。",
-            avatar: "🌐",
-            model: "",
-            isBuiltIn: true,
-            isActive: true,
-            sortOrder: 2,
-            createdAt: Date.now(),
-            updatedAt: Date.now(),
-          },
-          {
-            id: "writer",
-            name: "写作助手",
-            description: "帮助润色和改进文章",
-            systemPrompt:
-              "你是一个专业的写作助手。你可以帮助用户润色文章、改进表达、调整语气。请保持原文的核心意思，同时让表达更加流畅和准确。",
-            avatar: "✍️",
-            model: "",
-            isBuiltIn: true,
-            isActive: true,
-            sortOrder: 3,
-            createdAt: Date.now(),
-            updatedAt: Date.now(),
-          },
-          {
-            id: "coder",
-            name: "编程助手",
-            description: "帮助编写和调试代码",
-            systemPrompt:
-              "你是一个专业的编程助手。你可以帮助用户编写代码、调试程序、解释技术概念。请提供清晰、可运行的代码示例，并附带必要的注释。",
-            avatar: "💻",
-            model: "",
-            isBuiltIn: true,
-            isActive: true,
-            sortOrder: 4,
-            createdAt: Date.now(),
-            updatedAt: Date.now(),
-          },
-          {
-            id: "summarizer",
-            name: "摘要助手",
-            description: "快速总结文档内容",
-            systemPrompt:
-              "你是一个专业的摘要助手。请将用户提供的长文本总结成简洁的要点，保留关键信息和核心观点。",
-            avatar: "📝",
-            model: "",
-            isBuiltIn: true,
-            isActive: true,
-            sortOrder: 5,
-            createdAt: Date.now(),
-            updatedAt: Date.now(),
-          },
-        ];
+        // 使用统一的助手配置，确保与 PostgreSQL 数据库一致
+        const { BUILT_IN_ASSISTANTS } = await import("../config/assistants.config");
 
-        for (const assistant of defaultAssistants) {
+        for (const assistant of BUILT_IN_ASSISTANTS) {
           try {
             await tx.table<LocalAIAssistant>("aiAssistants").add(assistant);
           } catch {
             // 忽略已存在的助手
           }
         }
+        console.log(`已初始化 ${BUILT_IN_ASSISTANTS.length} 个内置 AI 助手`);
       });
 
     // 数据库版本 4：添加标签支持
@@ -325,6 +256,63 @@ export class AiNoteDatabase extends Dexie {
           if ((assistant as any).isBuiltIn === true) {
             await tx.table<LocalAIAssistant>("aiAssistants").delete(assistant.id);
             console.log(`[DB] 已删除内置助手: ${assistant.name}`);
+          }
+        }
+      });
+
+    // 数据库版本 8：为对话表添加 userId 和 assistantId 索引
+    this.version(8)
+      .stores({
+        notes:
+          "id, title, category, fileType, isDeleted, isFavorite, isPublic, createdAt, updatedAt, pendingSync",
+        noteVersions: "id, noteId, createdAt",
+        categories: "id, name, isPublic, createdAt, _pendingSync",
+        conversations: "id, noteId, userId, assistantId, createdAt, updatedAt",
+        modelConfigs: "id, name, enabled, isPublic, _pendingSync",
+        usageLogs: "id, modelId, timestamp",
+        attachments: "id, noteId, name, createdAt",
+        fileAttachments: "id, noteId, fileType, createdAt",
+        aiAssistants: "id, isPublic, isActive, sortOrder",
+        tags: "id, name, isPublic, createdAt, _pendingSync",
+        noteTags: "id, noteId, tagId, createdAt",
+      })
+      .upgrade(async () => {
+        console.log(
+          "Database upgraded to version 8: Added userId and assistantId indexes to conversations",
+        );
+      });
+
+    // 数据库版本 9：清理没有 userId 的旧对话数据
+    this.version(9)
+      .stores({
+        notes:
+          "id, title, category, fileType, isDeleted, isFavorite, isPublic, createdAt, updatedAt, pendingSync",
+        noteVersions: "id, noteId, createdAt",
+        categories: "id, name, isPublic, createdAt, _pendingSync",
+        conversations: "id, noteId, userId, assistantId, createdAt, updatedAt",
+        modelConfigs: "id, name, enabled, isPublic, _pendingSync",
+        usageLogs: "id, modelId, timestamp",
+        attachments: "id, noteId, name, createdAt",
+        fileAttachments: "id, noteId, fileType, createdAt",
+        aiAssistants: "id, isPublic, isActive, sortOrder",
+        tags: "id, name, isPublic, createdAt, _pendingSync",
+        noteTags: "id, noteId, tagId, createdAt",
+      })
+      .upgrade(async () => {
+        console.log(
+          "Database upgraded to version 9: Cleaned up old conversations without userId",
+        );
+
+        // 删除所有没有 userId 的旧对话数据
+        // 这些数据是在添加 userId 字段之前创建的
+        const allConversations = await this.conversations.toArray();
+        const conversationsToDelete = allConversations.filter(conv => !conv.userId);
+
+        if (conversationsToDelete.length > 0) {
+          console.log(`[DB] 删除了 ${conversationsToDelete.length} 个没有 userId 的旧对话`);
+
+          for (const conv of conversationsToDelete) {
+            await this.conversations.delete(conv.id);
           }
         }
       });
@@ -609,14 +597,28 @@ export class AiNoteDatabase extends Dexie {
   }
 
   async getConversations(noteId?: string): Promise<AIConversation[]> {
+    // 获取当前用户 ID
+    const { user } = await import("../store/authStore").then((m) => ({
+      user: m.useAuthStore.getState().user,
+    }));
+
+    if (!user) {
+      // 如果用户未登录，返回空数组
+      return [];
+    }
+
     if (noteId) {
       return await this.conversations
         .where("noteId")
         .equals(noteId)
+        .filter((conv) => conv.userId === user.id)
         .reverse()
         .sortBy("updatedAt");
     }
-    return await this.conversations.reverse().sortBy("updatedAt");
+    return await this.conversations
+      .filter((conv) => conv.userId === user.id)
+      .reverse()
+      .sortBy("updatedAt");
   }
 
   // 模型配置操作

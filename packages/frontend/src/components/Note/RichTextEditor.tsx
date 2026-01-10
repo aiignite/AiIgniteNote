@@ -291,6 +291,21 @@ const EditorContainer = styled.div`
       border-radius: ${BORDER.radius.md};
       margin: ${SPACING.lg} 0;
       box-shadow: ${SHADOW.md};
+      display: block;
+    }
+
+    img.rich-text-image {
+      max-width: 100%;
+      height: auto;
+      border-radius: ${BORDER.radius.lg};
+      margin: ${SPACING.lg} 0;
+      box-shadow: ${SHADOW.lg};
+      cursor: pointer;
+      transition: transform ${TRANSITION.normal};
+    }
+
+    img.rich-text-image:hover {
+      transform: scale(1.02);
     }
 
     hr {
@@ -339,7 +354,13 @@ function RichTextEditor({
       LinkExtension.configure({
         openOnClick: false,
       }),
-      ImageExtension,
+      ImageExtension.configure({
+        inline: false,
+        allowBase64: true,
+        HTMLAttributes: {
+          class: 'rich-text-image',
+        },
+      }),
       TextAlignExtension.configure({
         types: ["heading", "paragraph"],
       }),
@@ -357,15 +378,52 @@ function RichTextEditor({
   const handleImageUpload = useCallback(
     async (file: File) => {
       try {
+        // 验证文件类型
+        if (!file.type.startsWith('image/')) {
+          message.error('请选择图片文件');
+          return;
+        }
+
+        // 验证文件大小 (10MB)
+        const maxSize = 10 * 1024 * 1024;
+        if (file.size > maxSize) {
+          message.error('图片文件不能超过10MB');
+          return;
+        }
+
         // 将图片转换为 Base64
         const reader = new FileReader();
         reader.onload = () => {
           const base64 = reader.result as string;
+          
+          // 验证 Base64 数据
+          if (!base64 || !base64.startsWith('data:image/')) {
+            message.error('图片格式不正确');
+            return;
+          }
+
+          console.log('[RichTextEditor] 插入图片:', {
+            fileName: file.name,
+            fileSize: file.size,
+            base64Length: base64.length,
+            base64Preview: base64.substring(0, 100) + '...'
+          });
 
           // 插入图片到编辑器
-          editor?.chain().focus().setImage({ src: base64 }).run();
+          editor?.chain().focus().setImage({ 
+            src: base64,
+            alt: file.name,
+            title: file.name
+          }).run();
+          
           message.success("图片上传成功");
         };
+        
+        reader.onerror = () => {
+          console.error('图片读取失败');
+          message.error("图片读取失败");
+        };
+        
         reader.readAsDataURL(file);
       } catch (error) {
         console.error("图片上传失败:", error);

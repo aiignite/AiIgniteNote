@@ -97,29 +97,68 @@ export const useModelStore = create<ModelStore>((set, get) => ({
 
   loadUsageLogs: async (modelId, limit = 100) => {
     try {
-      const logs = await db.getUsageLogs(modelId, limit);
+      // 先从后端 API 获取最新的使用日志
+      const response = await modelsApi.getUsageLogs({
+        modelId,
+        limit,
+      });
+
+      const remoteLogs = response.data?.logs || [];
+
+      // 转换为本地格式
+      const logs: ModelUsageLog[] = remoteLogs.map((log: any) => ({
+        id: log.id,
+        modelId: log.modelId,
+        modelName: log.modelName,
+        success: log.success,
+        inputTokens: log.inputTokens || 0,
+        outputTokens: log.outputTokens || 0,
+        totalTokens: log.totalTokens || 0,
+        timestamp: new Date(log.createdAt).getTime(),
+      }));
+
       set({ usageLogs: logs });
     } catch (error) {
-      console.error("Failed to load usage logs:", error);
+      console.error("Failed to load usage logs from backend:", error);
+
+      // 如果 API 调用失败，回退到 IndexedDB
+      try {
+        const localLogs = await db.getUsageLogs(modelId, limit);
+        set({ usageLogs: localLogs });
+      } catch (dbError) {
+        console.error("Failed to load usage logs from IndexedDB:", dbError);
+        set({ usageLogs: [] });
+      }
     }
   },
 
   createConfig: async (configData) => {
+    console.log("🔧 [modelStore] 开始创建配置:", configData);
+
     try {
       // 优先调用后端 API 创建
+      console.log("📡 [modelStore] 调用后端 API...");
       const response = await modelsApi.createConfig({
         name: configData.name,
         description: configData.description,
         apiKey: configData.apiKey || "",
         apiEndpoint: configData.apiEndpoint,
+        apiType: configData.apiType,
         model: configData.model,
         temperature: configData.temperature,
         maxTokens: configData.maxTokens,
         topP: configData.topP,
         isPublic: configData.isPublic ?? false,
       });
+
+      console.log("✅ [modelStore] 后端 API 响应:", response);
       const newConfig = response.data;
 
+      if (!newConfig || !newConfig.id) {
+        throw new Error("后端返回的数据无效");
+      }
+
+      console.log("💾 [modelStore] 同步到 IndexedDB...");
       // 同步到 IndexedDB
       await db.modelConfigs.add({
         ...newConfig,
@@ -127,14 +166,23 @@ export const useModelStore = create<ModelStore>((set, get) => ({
         apiKey: configData.apiKey || "", // 使用用户输入的 apiKey
       });
 
+      console.log("✅ [modelStore] IndexedDB 保存成功");
+
       // 更新状态
       set((state) => ({ configs: [...state.configs, newConfig] }));
+      console.log("✅ [modelStore] 配置创建完成:", newConfig);
       return newConfig;
-    } catch (error) {
-      console.error("Failed to create model config:", error);
+    } catch (error: any) {
+      console.error("❌ [modelStore] 创建配置失败:", error);
+      console.error("错误详情:", {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status
+      });
 
       // 如果后端调用失败（可能是离线），回退到只存储到 IndexedDB
       try {
+        console.log("📴 [modelStore] 回退到离线模式...");
         const config = await db.createModelConfig({
           ...configData,
           // 添加离线标记
@@ -144,10 +192,10 @@ export const useModelStore = create<ModelStore>((set, get) => ({
         // 标记为待同步
         await db.modelConfigs.update(config.id, { _pendingSync: true });
 
-        console.warn("Config saved locally (pending sync when online)");
+        console.warn("⚠️ [modelStore] 配置已保存到本地 (待同步)");
         return config;
       } catch (dbError) {
-        console.error("Failed to save to IndexedDB:", dbError);
+        console.error("❌ [modelStore] IndexedDB 保存也失败:", dbError);
         throw error;
       }
     }
@@ -275,11 +323,16 @@ export const useModelStore = create<ModelStore>((set, get) => ({
     set({ quota });
   },
 
-  testConnection: async () => {
+  testConnection: async (config) => {
     try {
-      // 这里会实际调用API测试连接
-      // 暂时返回true
-      return true;
+      // 调用后端 API 测试连接
+      const response = await modelsApi.testConnectionConfig({
+        apiType: config.apiType || "openai",
+        apiEndpoint: config.apiEndpoint,
+        apiKey: config.apiKey,
+        model: config.model,
+      });
+      return response.data?.success || false;
     } catch (error) {
       console.error("Failed to test connection:", error);
       return false;

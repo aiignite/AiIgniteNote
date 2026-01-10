@@ -12,6 +12,7 @@ interface User {
   bio?: string;
   location?: string;
   website?: string;
+  requirePasswordChange?: boolean; // 是否需要修改密码
 }
 
 interface AuthState {
@@ -33,6 +34,7 @@ interface AuthState {
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
   updateUser: (data: Partial<User>) => Promise<void>;
+  changePassword: (oldPassword: string, newPassword: string) => Promise<void>;
   setTokens: (accessToken: string, refreshToken: string) => void;
   _setHasHydrated: (state: boolean) => void;
 }
@@ -133,6 +135,21 @@ export const useAuthStore = create<AuthState>()(
         if (currentUser) {
           const updatedUser = { ...currentUser, ...data };
           set({ user: updatedUser });
+        }
+      },
+
+      changePassword: async (oldPassword: string, newPassword: string) => {
+        try {
+          await authApi.changePassword({ currentPassword: oldPassword, newPassword });
+          // 更新用户状态，移除需要修改密码的标记
+          const currentUser = get().user;
+          if (currentUser) {
+            set({
+              user: { ...currentUser, requirePasswordChange: false }
+            });
+          }
+        } catch (error: any) {
+          throw error;
         }
       },
 

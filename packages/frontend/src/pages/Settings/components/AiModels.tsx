@@ -90,16 +90,18 @@ const ViewToggle = styled(Segmented)`
 `;
 
 const CardGrid = styled(Row)`
-  gap: ${SPACING.md};
+  gap: ${SPACING.lg};
+  align-items: stretch;
 `;
 
 const ModelCard = styled(Card)`
-  height: 100%;
   border: 1px solid ${COLORS.subtle};
   border-radius: ${BORDER.radius.md};
   transition: all ${TRANSITION.fast};
   animation: ${fadeIn} 0.3s ease-out;
   background: ${COLORS.paper};
+  display: flex;
+  flex-direction: column;
 
   &:hover {
     border-color: ${COLORS.inkLight};
@@ -108,18 +110,21 @@ const ModelCard = styled(Card)`
   }
 
   .ant-card-body {
-    padding: ${SPACING.lg};
-    height: calc(100% - 1px);
+    padding: ${SPACING.md};
+    flex: 1;
+    overflow-y: auto;
+    max-height: 350px;
   }
 
   .ant-card-actions {
     background: ${COLORS.background};
+    flex-shrink: 0;
     > li {
       margin: 0;
 
       > span {
-        padding: ${SPACING.sm} 0;
-        font-size: ${TYPOGRAPHY.fontSize.sm};
+        padding: 4px 0;
+        font-size: 11px;
         color: ${COLORS.inkLight};
         transition: color ${TRANSITION.fast};
 
@@ -132,15 +137,15 @@ const ModelCard = styled(Card)`
 `;
 
 const ModelIcon = styled.div<{ $color?: string }>`
-  width: 48px;
-  height: 48px;
+  width: 40px;
+  height: 40px;
   display: flex;
   align-items: center;
   justify-content: center;
   background: ${(props) => props.$color || COLORS.background};
   border-radius: ${BORDER.radius.md};
-  margin-bottom: ${SPACING.md};
-  font-size: ${TYPOGRAPHY.fontSize["2xl"]};
+  margin-bottom: ${SPACING.sm};
+  font-size: ${TYPOGRAPHY.fontSize.xl};
   color: ${(props) => props.$color || COLORS.ink};
 `;
 
@@ -153,31 +158,32 @@ const ModelTitle = styled.div`
 `;
 
 const ModelDescription = styled.div`
-  font-size: ${TYPOGRAPHY.fontSize.sm};
+  font-size: ${TYPOGRAPHY.fontSize.xs};
   color: ${COLORS.inkLight};
-  margin-bottom: ${SPACING.md};
-  min-height: 40px;
+  margin-bottom: ${SPACING.sm};
+  min-height: 32px;
+  line-height: 1.4;
 `;
 
 const ModelMeta = styled.div`
   display: flex;
   flex-wrap: wrap;
-  gap: ${SPACING.xs};
-  margin-bottom: ${SPACING.md};
+  gap: 4px;
+  margin-bottom: ${SPACING.sm};
 `;
 
 const StyledTag = styled(Tag)`
-  font-size: ${TYPOGRAPHY.fontSize.xs};
+  font-size: 11px;
   border-radius: ${BORDER.radius.full};
-  padding: 2px ${SPACING.sm};
+  padding: 1px 6px;
   margin: 0;
 `;
 
 const StatsRow = styled(Row)`
-  padding: ${SPACING.sm};
+  padding: 6px;
   background: ${COLORS.background};
   border-radius: ${BORDER.radius.sm};
-  margin-top: ${SPACING.md};
+  margin-top: ${SPACING.sm};
 `;
 
 const ListItemContainer = styled.div`
@@ -524,22 +530,24 @@ export default function AiModels() {
     const apiTypeInfo = getAPITypeInfo(model.apiType);
 
     return (
-      <Col key={model.id} xs={24} sm={12} lg={8}>
+      <Col key={model.id} xs={24} sm={12} md={8} lg={6} xl={4}>
         <ModelCard
           actions={[
             <Button
               key="default"
               type="text"
               size="small"
+              style={{ fontSize: 11, padding: '2px 4px', height: 'auto' }}
               disabled={model.isDefault}
               onClick={() => handleToggleDefault(model)}
             >
-              {model.isDefault ? "默认" : "设为默认"}
+              {model.isDefault ? "默认" : "设默认"}
             </Button>,
             <Button
               key="toggle"
               type="text"
               size="small"
+              style={{ fontSize: 11, padding: '2px 4px', height: 'auto' }}
               onClick={() => handleToggleEnabled(model)}
             >
               {model.enabled ? "禁用" : "启用"}
@@ -548,6 +556,7 @@ export default function AiModels() {
               key="edit"
               type="text"
               size="small"
+              style={{ fontSize: 11, padding: '2px 4px', height: 'auto' }}
               icon={<EditOutlined />}
               onClick={() => handleEdit(model)}
             >
@@ -560,7 +569,7 @@ export default function AiModels() {
               okText="确定"
               cancelText="取消"
             >
-              <Button type="text" size="small" danger icon={<DeleteOutlined />}>
+              <Button type="text" size="small" danger style={{ fontSize: 11, padding: '2px 4px', height: 'auto' }} icon={<DeleteOutlined />}>
                 删除
               </Button>
             </Popconfirm>,
@@ -590,11 +599,11 @@ export default function AiModels() {
               </StyledTag>
             )}
           </ModelMeta>
-          <div style={{ fontSize: 12, color: COLORS.inkMuted }}>
+          <div style={{ fontSize: 11, color: COLORS.inkMuted, lineHeight: 1.4 }}>
             <div>模型: {model.model}</div>
-            <div style={{ marginTop: 4 }}>
-              端点: {model.apiEndpoint.slice(0, 30)}
-              {model.apiEndpoint.length > 30 ? "..." : ""}
+            <div style={{ marginTop: 2 }}>
+              端点: {model.apiEndpoint.slice(0, 25)}
+              {model.apiEndpoint.length > 25 ? "..." : ""}
             </div>
           </div>
           {stats && stats.totalCalls > 0 && (

@@ -235,8 +235,8 @@ const StyledInput = styled(Input)`
 const PrimaryButton = styled(Button)`
   height: 40px;
   padding: 0 ${SPACING.xl};
-  background: ${COLORS.ink};
-  border-color: ${COLORS.ink};
+  background: ${COLORS.accent};
+  border-color: ${COLORS.accent};
   border-radius: ${BORDER.radius.sm};
   color: ${COLORS.paper};
   font-weight: ${TYPOGRAPHY.fontWeight.medium};

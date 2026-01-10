@@ -17,6 +17,7 @@ async function main() {
       username: "demo",
       passwordHash,
       displayName: "Demo User",
+      requirePasswordChange: true, // 标记为需要修改密码
       preferences: JSON.stringify({
         theme: "light",
         language: "zh-CN",
@@ -88,6 +89,82 @@ async function main() {
 
   console.log(`✅ Created ${categories.length} categories`);
 
+  // Create default tags
+  const tags = await Promise.all([
+    prisma.tag.upsert({
+      where: {
+        userId_name: {
+          userId: demoUser.id,
+          name: "欢迎",
+        },
+      },
+      update: {},
+      create: {
+        name: "欢迎",
+        color: "#52c41a",
+        userId: demoUser.id,
+      },
+    }),
+    prisma.tag.upsert({
+      where: {
+        userId_name: {
+          userId: demoUser.id,
+          name: "教程",
+        },
+      },
+      update: {},
+      create: {
+        name: "教程",
+        color: "#1890ff",
+        userId: demoUser.id,
+      },
+    }),
+    prisma.tag.upsert({
+      where: {
+        userId_name: {
+          userId: demoUser.id,
+          name: "AI",
+        },
+      },
+      update: {},
+      create: {
+        name: "AI",
+        color: "#722ed1",
+        userId: demoUser.id,
+      },
+    }),
+    prisma.tag.upsert({
+      where: {
+        userId_name: {
+          userId: demoUser.id,
+          name: "工作",
+        },
+      },
+      update: {},
+      create: {
+        name: "工作",
+        color: "#fa8c16",
+        userId: demoUser.id,
+      },
+    }),
+    prisma.tag.upsert({
+      where: {
+        userId_name: {
+          userId: demoUser.id,
+          name: "学习",
+        },
+      },
+      update: {},
+      create: {
+        name: "学习",
+        color: "#13c2c2",
+        userId: demoUser.id,
+      },
+    }),
+  ]);
+
+  console.log(`✅ Created ${tags.length} tags`);
+
   // Create demo notes
   const notes = await Promise.all([
     prisma.note.upsert({
@@ -104,7 +181,6 @@ async function main() {
         fileType: "markdown",
         categoryId: categories[0].id,
         userId: demoUser.id,
-        tags: JSON.stringify(["欢迎", "教程"]),
         isFavorite: true,
       },
     }),
@@ -122,12 +198,71 @@ async function main() {
         fileType: "markdown",
         categoryId: categories[0].id,
         userId: demoUser.id,
-        tags: JSON.stringify(["AI", "教程"]),
       },
     }),
   ]);
 
   console.log(`✅ Created ${notes.length} demo notes`);
+
+  // Create note-tag associations
+  await Promise.all([
+    // demo-note-1: 欢迎, 教程
+    prisma.noteTag.upsert({
+      where: {
+        noteId_tagId: {
+          noteId: notes[0].id,
+          tagId: tags[0].id, // 欢迎
+        },
+      },
+      update: {},
+      create: {
+        noteId: notes[0].id,
+        tagId: tags[0].id,
+      },
+    }),
+    prisma.noteTag.upsert({
+      where: {
+        noteId_tagId: {
+          noteId: notes[0].id,
+          tagId: tags[1].id, // 教程
+        },
+      },
+      update: {},
+      create: {
+        noteId: notes[0].id,
+        tagId: tags[1].id,
+      },
+    }),
+    // demo-note-2: AI, 教程
+    prisma.noteTag.upsert({
+      where: {
+        noteId_tagId: {
+          noteId: notes[1].id,
+          tagId: tags[2].id, // AI
+        },
+      },
+      update: {},
+      create: {
+        noteId: notes[1].id,
+        tagId: tags[2].id,
+      },
+    }),
+    prisma.noteTag.upsert({
+      where: {
+        noteId_tagId: {
+          noteId: notes[1].id,
+          tagId: tags[1].id, // 教程
+        },
+      },
+      update: {},
+      create: {
+        noteId: notes[1].id,
+        tagId: tags[1].id,
+      },
+    }),
+  ]);
+
+  console.log(`✅ Created note-tag associations`);
 
   // Create built-in AI assistants
   const assistants = await Promise.all([
@@ -147,7 +282,6 @@ async function main() {
         temperature: 0.7,
         maxTokens: 2000,
         sortOrder: 0,
-        isBuiltIn: true,
         isActive: true,
         userId: demoUser.id,
       },
@@ -168,7 +302,6 @@ async function main() {
         temperature: 0.5,
         maxTokens: 1000,
         sortOrder: 1,
-        isBuiltIn: true,
         isActive: true,
         userId: demoUser.id,
       },
@@ -189,7 +322,6 @@ async function main() {
         temperature: 0.3,
         maxTokens: 2000,
         sortOrder: 2,
-        isBuiltIn: true,
         isActive: true,
         userId: demoUser.id,
       },
@@ -210,7 +342,6 @@ async function main() {
         temperature: 0.2,
         maxTokens: 2000,
         sortOrder: 3,
-        isBuiltIn: true,
         isActive: true,
         userId: demoUser.id,
       },

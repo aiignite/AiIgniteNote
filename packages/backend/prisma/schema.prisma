@@ -9,18 +9,20 @@ datasource db {
 
 // 用户表
 model User {
-  id            String    @id @default(cuid())
-  email         String    @unique
-  username      String?   @unique
-  passwordHash  String    @map("password_hash")
-  displayName   String?   @map("display_name")
-  avatar        String?
-  preferences   Json?     // 使用 PostgreSQL 的 JSONB 类型
-  isActive      Boolean   @default(true) @map("is_active")
-  emailVerified Boolean   @default(false) @map("email_verified")
-  lastLoginAt   DateTime? @map("last_login_at")
-  createdAt     DateTime  @default(now()) @map("created_at")
-  updatedAt     DateTime  @updatedAt @map("updated_at")
+  id                String    @id @default(cuid())
+  email             String    @unique
+  username          String?   @unique
+  passwordHash      String    @map("password_hash")
+  displayName       String?   @map("display_name")
+  avatar            String?
+  preferences       Json?     // 使用 PostgreSQL 的 JSONB 类型
+  isActive          Boolean   @default(true) @map("is_active")
+  emailVerified     Boolean   @default(false) @map("email_verified")
+  requirePasswordChange Boolean   @default(false) @map("require_password_change") // 是否需要修改密码
+  passwordChangedAt DateTime? @map("password_changed_at") // 最后修改密码时间
+  lastLoginAt       DateTime? @map("last_login_at")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
 
   // 关系
   notes            Note[]

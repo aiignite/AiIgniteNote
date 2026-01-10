@@ -19,5 +19,13 @@ export const authApi = {
 
   // Get current user
   getCurrentUser: () =>
-    apiClient.get('/auth/me')
+    apiClient.get('/auth/me'),
+
+  // Change password
+  changePassword: (data: { currentPassword: string; newPassword: string }) =>
+    apiClient.post('/auth/change-password', data),
+
+  // Check if using default password
+  checkDefaultPassword: () =>
+    apiClient.get('/auth/check-default-password'),
 };

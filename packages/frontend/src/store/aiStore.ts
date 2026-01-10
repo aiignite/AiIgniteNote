@@ -430,8 +430,14 @@ export const useAIStore = create<AIStore>((set, get) => ({
 
   createConversation: async (noteId) => {
     try {
+      // 获取当前用户和当前助手
+      const { user } = useAuthStore.getState();
+      const { currentAssistant } = get();
+
       const conversation = await db.createConversation({
         noteId,
+        userId: user?.id,
+        assistantId: currentAssistant?.id,
         messages: [],
       });
       set((state) => ({

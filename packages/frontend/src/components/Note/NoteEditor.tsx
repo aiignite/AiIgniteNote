@@ -28,6 +28,7 @@ import { useNavigate } from "react-router-dom";
 import { useNoteStore } from "../../store/noteStore";
 import { useTagStore } from "../../store/tagStore";
 import { useFullscreenStore } from "../../store/fullscreenStore";
+import { FILE_TYPE_ASSISTANT_MAP } from "../../config/assistants.config";
 import { useAIStore } from "../../store/aiStore";
 import { useAutoSave } from "../../hooks/useAutoSave";
 import { db } from "../../db";
@@ -244,16 +245,16 @@ const CreateButton = styled(Button)`
   height: 48px;
   padding: 0 ${SPACING.xl};
   border-radius: ${BORDER.radius.md};
-  background: ${COLORS.ink};
-  border-color: ${COLORS.ink};
+  background: ${COLORS.accent};
+  border-color: ${COLORS.accent};
   color: ${COLORS.paper};
   font-size: ${TYPOGRAPHY.fontSize.md};
   font-weight: ${TYPOGRAPHY.fontWeight.medium};
   transition: all ${TRANSITION.normal};
 
   &:hover {
-    background: ${COLORS.accent};
-    border-color: ${COLORS.accent};
+    background: ${COLORS.accentHover};
+    border-color: ${COLORS.accentHover};
     transform: translateY(-2px);
     box-shadow: ${SHADOW.accentHover};
   }
@@ -273,7 +274,7 @@ function NoteEditor({ noteId }: NoteEditorProps) {
   const { currentNote, setCurrentNote, updateNote, createNote } =
     useNoteStore();
   const { setCurrentAssistant, assistants, setCurrentNoteId } = useAIStore();
-  const { tags: allTags, loadTags } = useTagStore();
+  const { tags: allTags, loadTags, createTag } = useTagStore();
 
   // 状态管理
   const [title, setTitle] = useState("");
@@ -298,25 +299,8 @@ function NoteEditor({ noteId }: NoteEditorProps) {
   useEffect(() => {
     if (!fileType || !assistants.length) return;
 
-    let targetAssistantId: string | null = null;
-
-    // 根据文件类型选择对应的助手（使用真实的助手 ID）
-    if (fileType === NoteFileType.MINDMAP) {
-      // 思维导图 -> 思维导图助手
-      targetAssistantId = "mindmap";
-    } else if (fileType === NoteFileType.MONACO) {
-      // Monaco 代码编辑器 -> 代码助手
-      targetAssistantId = "coding_public";
-    } else if (
-      fileType === NoteFileType.MARKDOWN ||
-      fileType === NoteFileType.RICH_TEXT
-    ) {
-      // Markdown 或富文本 -> 写作助手
-      targetAssistantId = "writing_public";
-    } else if (fileType === NoteFileType.DRAWIO) {
-      // DrawIO -> 思维导图助手（或者可以创建专门的 drawio 助手）
-      targetAssistantId = "mindmap";
-    }
+    // 使用统一的助手 ID 映射配置
+    const targetAssistantId = FILE_TYPE_ASSISTANT_MAP[fileType];
 
     if (targetAssistantId) {
       const targetAssistant = assistants.find(
@@ -353,13 +337,52 @@ function NoteEditor({ noteId }: NoteEditorProps) {
             // 🔥 设置当前笔记 ID 到 AI Store
             setCurrentNoteId(noteId);
             setTitle(note.title);
-            setContent(note.content || "");
             // 从 noteTags 表加载标签关联
             const noteTags = await db.getNoteTags(noteId);
             setTagIds(noteTags.map((t) => t.id));
             setMetadata(note.metadata);
             // 兼容旧数据：没有 fileType 的默认为 markdown
             setFileType(note.fileType || NoteFileType.MARKDOWN);
+
+            // 加载内容：富文本使用 htmlContent，其他使用 content
+            // 🔍 调试：检查类型和内容
+            const isRichText = note.fileType === NoteFileType.RICH_TEXT || note.fileType === "richtext";
+            const hasHtmlContent = !!note.htmlContent && note.htmlContent.length > 0;
+            const hasContentWithImage = note.content?.includes('<img src=');
+
+            // 优先使用 htmlContent，如果没有但有图片的 content，也使用 content
+            let loadedContent = "";
+            if (isRichText) {
+              if (hasHtmlContent) {
+                loadedContent = note.htmlContent;
+                console.log("[NoteEditor] 使用 htmlContent");
+              } else if (hasContentWithImage) {
+                loadedContent = note.content;
+                console.log("[NoteEditor] htmlContent 为空，但 content 包含图片，使用 content");
+              } else {
+                loadedContent = note.content || "";
+                console.log("[NoteEditor] 使用普通 content");
+              }
+            } else {
+              loadedContent = note.content || "";
+            }
+
+            console.log("[NoteEditor] 加载笔记:", {
+              noteId,
+              fileType: note.fileType,
+              fileTypeEnum: NoteFileType.RICH_TEXT,
+              isRichText,
+              hasHtmlContent,
+              htmlContentLength: note.htmlContent?.length || 0,
+              hasContentWithImage,
+              contentLength: note.content?.length || 0,
+              loadedContentLength: loadedContent.length,
+              loadedContentPreview: loadedContent.substring(0, 200),
+              imageCount: (loadedContent?.match(/<img[^>]+>/g) || []).length,
+              hasBase64Images: loadedContent?.includes('data:image/') || false,
+            });
+
+            setContent(loadedContent);
 
             // 标记笔记加载完成
             setIsNoteLoaded(true);
@@ -395,13 +418,30 @@ function NoteEditor({ noteId }: NoteEditorProps) {
         .filter((t) => tagIds.includes(t.id))
         .map((t) => t.name);
 
-      await updateNote(noteId, {
+      // 富文本编辑器：保存到 htmlContent 字段
+      const updateData: any = {
         title,
         content,
         tags: tagNames,
         fileType,
         metadata,
-      });
+      };
+
+      // 如果是富文本，将 content 内容保存到 htmlContent
+      if (fileType === NoteFileType.RICH_TEXT) {
+        updateData.htmlContent = content;
+        
+        // 调试日志：检查保存的内容
+        console.log('[NoteEditor] 保存富文本内容:', {
+          noteId,
+          contentLength: content?.length || 0,
+          hasImages: content?.includes('<img src=') || false,
+          imageCount: (content?.match(/<img[^>]+>/g) || []).length,
+          contentPreview: content?.substring(0, 200) + '...'
+        });
+      }
+
+      await updateNote(noteId, updateData);
     } catch (error) {
       console.error("Save failed:", error);
     }
@@ -468,30 +508,18 @@ function NoteEditor({ noteId }: NoteEditorProps) {
     }
 
     try {
-      // 生成唯一 ID
-      const newTagId = `tag-${Date.now()}`;
-      const now = Date.now();
-      const newTag = {
-        id: newTagId,
+      // 使用 tagStore 的 createTag 方法，会自动同步到后端
+      const newTag = await createTag({
         name: newTagName.trim(),
         color: newTagColor,
-        createdAt: now,
-        updatedAt: now,
-      };
-
-      // 保存到 IndexedDB
-      await db.tags.add(newTag);
-
-      // 手动更新 tagStore 中的标签列表（不重新加载，避免覆盖新标签）
-      const { tags: currentTags } = useTagStore.getState();
-      useTagStore.setState({ tags: [...currentTags, newTag] });
+      });
 
       // 清空输入
       setNewTagName("");
       setNewTagColor("#108ee9");
 
       // 自动选中新创建的标签
-      setTagIds([...tagIds, newTagId]);
+      setTagIds([...tagIds, newTag.id]);
 
       message.success("标签创建成功");
     } catch (error) {

@@ -162,6 +162,7 @@ export class AuthService {
         username: user.username,
         displayName: user.displayName,
         avatar: user.avatar,
+        requirePasswordChange: user.requirePasswordChange,
       },
       tokens,
     };
@@ -239,6 +240,77 @@ export class AuthService {
     }
 
     return user;
+  }
+
+  async changePassword(userId: string, data: { currentPassword: string; newPassword: string }) {
+    // Find user
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      throw new Error("USER_NOT_FOUND");
+    }
+
+    // Verify current password
+    const isValid = await bcrypt.compare(data.currentPassword, user.passwordHash);
+    if (!isValid) {
+      throw new Error("INVALID_CURRENT_PASSWORD");
+    }
+
+    // Validate new password
+    this.validatePassword(data.newPassword);
+
+    // Check if new password is same as current
+    const isSame = await bcrypt.compare(data.newPassword, user.passwordHash);
+    if (isSame) {
+      throw new Error("NEW_PASSWORD_SAME_AS_CURRENT");
+    }
+
+    // Hash new password
+    const newPasswordHash = await bcrypt.hash(data.newPassword, 10);
+
+    // Update password and clear requirePasswordChange flag
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        passwordHash: newPasswordHash,
+        requirePasswordChange: false,
+        passwordChangedAt: new Date(),
+      },
+    });
+
+    // Delete all refresh tokens to force re-login
+    await prisma.refreshToken.deleteMany({
+      where: { userId },
+    });
+
+    return { message: "密码修改成功，请重新登录" };
+  }
+
+  // 检查是否使用默认密码
+  async isUsingDefaultPassword(userId: string): Promise<boolean> {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { passwordHash: true },
+    });
+
+    if (!user) {
+      throw new Error("USER_NOT_FOUND");
+    }
+
+    // 默认密码是 seeyao123
+    const DEFAULT_PASSWORD = "seeyao123";
+    return await bcrypt.compare(DEFAULT_PASSWORD, user.passwordHash);
+  }
+
+  private validatePassword(password: string) {
+    // 密码规则：至少8位
+    const minLength = 8;
+
+    if (password.length < minLength) {
+      throw new Error("密码长度至少8位");
+    }
   }
 
   private async storeRefreshToken(userId: string, token: string) {

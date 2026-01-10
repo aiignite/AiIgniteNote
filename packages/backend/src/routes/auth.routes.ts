@@ -105,4 +105,38 @@ export default async function authRoutes(fastify: FastifyInstance) {
       });
     }
   });
+
+  // Change password
+  fastify.post("/change-password", { onRequest: [authenticate] }, async (request, reply) => {
+    try {
+      const req = request as any;
+      const authService = new AuthService(fastify.jwt);
+      const result = await authService.changePassword(req.userId, request.body as any);
+      return result;
+    } catch (error: any) {
+      reply.status(400).send({
+        error: {
+          message: error.message,
+          code: error.message,
+        },
+      });
+    }
+  });
+
+  // Check if using default password
+  fastify.get("/check-default-password", { onRequest: [authenticate] }, async (request, reply) => {
+    try {
+      const req = request as any;
+      const authService = new AuthService(fastify.jwt);
+      const isDefault = await authService.isUsingDefaultPassword(req.userId);
+      return { isUsingDefaultPassword: isDefault };
+    } catch (error: any) {
+      reply.status(400).send({
+        error: {
+          message: error.message,
+          code: error.message,
+        },
+      });
+    }
+  });
 }
