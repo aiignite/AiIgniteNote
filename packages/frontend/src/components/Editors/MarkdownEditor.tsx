@@ -2,7 +2,6 @@ import styled from "styled-components";
 import MDEditor, { commands } from "@uiw/react-md-editor";
 import type { EditorProps } from "./BaseEditor";
 import "@uiw/react-md-editor/markdown-editor.css";
-import "@uiw/react-markdown-preview/markdown.css";
 
 const EditorWrapper = styled.div`
   flex: 1;

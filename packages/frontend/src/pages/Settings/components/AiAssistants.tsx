@@ -40,7 +40,7 @@ import {
   SHADOW,
   TRANSITION,
 } from "../../../styles/design-tokens";
-import { useAIStore } from "../../../store/aiStore";
+import { useAIStore, type AIAssistant } from "../../../store/aiStore";
 import { useModelStore } from "../../../store/modelStore";
 import { useAuthStore } from "../../../store/authStore";
 import { aiApi } from "../../../lib/api/ai";
@@ -260,19 +260,7 @@ type ViewMode = "list" | "grid";
 // Types
 // ============================================
 
-interface AIAssistant {
-  id: string;
-  name: string;
-  description: string;
-  systemPrompt: string;
-  avatar: string;
-  model: string;
-  temperature?: number;
-  maxTokens?: number;
-  isPublic?: boolean;
-  userId?: string;
-  isActive: boolean;
-}
+// AIAssistant 类型从 aiStore 导入
 
 // ============================================
 // Main Component

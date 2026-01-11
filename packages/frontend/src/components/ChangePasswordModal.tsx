@@ -138,7 +138,7 @@ export default function ChangePasswordModal({ visible, onConfirm }: ChangePasswo
         </>
       }
       open={visible}
-      onCancel={onConfirm}
+      onCancel={() => onConfirm()}
       footer={null}
       closable={false}
       maskClosable={false}

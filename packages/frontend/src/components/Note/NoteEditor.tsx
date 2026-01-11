@@ -346,7 +346,7 @@ function NoteEditor({ noteId }: NoteEditorProps) {
 
             // 加载内容：富文本使用 htmlContent，其他使用 content
             // 🔍 调试：检查类型和内容
-            const isRichText = note.fileType === NoteFileType.RICH_TEXT || note.fileType === "richtext";
+            const isRichText = note.fileType === NoteFileType.RICH_TEXT;
             const hasHtmlContent = !!note.htmlContent && note.htmlContent.length > 0;
             const hasContentWithImage = note.content?.includes('<img src=');
 
@@ -488,6 +488,9 @@ function NoteEditor({ noteId }: NoteEditorProps) {
         isDeleted: false,
         isFavorite: false,
         fileType: NoteFileType.MARKDOWN,
+        synced: false,
+        pendingSync: true,
+        needsServerId: true,
       });
       navigate(`/notes/${newNote.id}`);
     } catch (error) {

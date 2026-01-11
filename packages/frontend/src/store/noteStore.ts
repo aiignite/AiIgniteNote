@@ -608,11 +608,10 @@ export const useNoteStore = create<NoteStore>((set, get) => ({
             sortOrder: response.data.sortOrder,
             isPublic: response.data.isPublic ?? false,
             createdAt: new Date(response.data.createdAt).getTime(),
-            _synced: true, // 标记为已同步
           };
 
-          // 同步到 IndexedDB
-          await db.categories.add(newCategory as any);
+          // 同步到 IndexedDB（添加 _synced 标记）
+          await db.categories.add({ ...newCategory, _synced: true } as any);
 
           // 更新状态
           set((state) => ({ categories: [...state.categories, newCategory] }));

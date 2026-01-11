@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { AIConversation, AIMessage } from "../types";
+import { AIConversation, AIMessage, LocalAIAssistant } from "../types";
 import { db } from "../db";
 import { aiApi } from "../lib/api/ai";
 import { buildMessagesForAI, getTokenUsage } from "../lib/api/contextManager";
@@ -885,7 +885,7 @@ export const useAIStore = create<AIStore>((set, get) => ({
   sendDrawioToAI: async (fullXML: string, selectedElements?: any[]) => {
     // 准备剪贴板数据
     const clipboardData: DrawIOClipboardData = {
-      fullData: fullXML,
+      fullData: fullXML as any, // XML string will be parsed to DrawIOGraphModel
       selectedData: selectedElements || [],
     };
 

@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { Input, Button, Dropdown, message, Divider, Tooltip, Tag } from "antd";
+import logoIcon from "../../assets/AIIgniteNoteSmall.png";
 import {
   FileTextOutlined,
   StarOutlined,
@@ -464,6 +465,9 @@ function Sidebar({ collapsed, onCollapse }: SidebarProps) {
         isDeleted: false,
         isFavorite: false,
         fileType,
+        synced: false,
+        pendingSync: true,
+        needsServerId: true,
       });
 
       // 记住用户最后使用的文件类型
@@ -531,7 +535,7 @@ function Sidebar({ collapsed, onCollapse }: SidebarProps) {
         ) : (
           <LogoText>
             <LogoImage
-              src="/src/assets/AIIgniteNoteSmall.png"
+              src={logoIcon}
               alt="AIIgniteNote"
             />
             <BrandLogo size="small" />

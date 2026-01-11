@@ -16,25 +16,13 @@ import {
 import { GlobalOutlined, LockOutlined } from "@ant-design/icons";
 import { useModelStore } from "../../store/modelStore";
 import { useAuthStore } from "../../store/authStore";
-import { useAIStore } from "../../store/aiStore";
+import { useAIStore, type AIAssistant } from "../../store/aiStore";
 
 // ============================================
 // Types
 // ============================================
 
-export interface AIAssistant {
-  id: string;
-  name: string;
-  description: string;
-  systemPrompt: string;
-  avatar: string;
-  model: string;
-  temperature?: number;
-  maxTokens?: number;
-  isPublic?: boolean;
-  userId?: string;
-  isActive: boolean;
-}
+// AIAssistant 类型现在从 aiStore 导入
 
 interface AssistantEditModalProps {
   visible: boolean;
@@ -83,7 +71,7 @@ export default function AssistantEditModal({
         name: values.name,
         description: values.description,
         systemPrompt: values.systemPrompt,
-        avatar: values.avatar,
+        avatar: values.avatar || "🤖",
         model: values.model || "",
         temperature: values.temperature,
         maxTokens: values.maxTokens,

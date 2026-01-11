@@ -23,6 +23,7 @@ export const notesApi = {
     categoryId: string;
     tags?: string[];
     metadata?: any;
+    isPublic?: boolean;
   }) => apiClient.post("/notes", data),
 
   // Update note
@@ -37,6 +38,7 @@ export const notesApi = {
       tags?: string[];
       metadata?: any;
       isFavorite?: boolean;
+      isPublic?: boolean;
     },
   ) => apiClient.put(`/notes/${id}`, data),
 
@@ -80,6 +82,7 @@ export const notesApi = {
     icon?: string;
     color?: string;
     sortOrder?: number;
+    isPublic?: boolean;
   }) => apiClient.post("/categories", data),
 
   updateCategory: (

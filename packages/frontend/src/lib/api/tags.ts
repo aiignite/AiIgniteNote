@@ -13,6 +13,7 @@ export interface Tag {
 export interface CreateTagData {
   name: string;
   color?: string;
+  isPublic?: boolean;
 }
 
 export interface UpdateTagData {

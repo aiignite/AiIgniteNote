@@ -7,7 +7,7 @@
  * - 自动处理数据同步和冲突解决
  */
 
-import { db } from '../db';
+import { db, AiNoteDatabase } from '../../db';
 import { apiClient } from './client';
 
 // ============================================
@@ -249,7 +249,7 @@ export class DataSyncService {
       return { success: false, synced: 0, failed: 0, errors: [] };
     }
 
-    console.log(`[DataSync] 从服务器同步 ${config.tableName}...`);
+    console.log(`[DataSync] 从服务器同步 ${String(config.tableName)}...`);
 
     try {
       const response = await apiClient.get(config.apiEndpoint);
@@ -282,11 +282,11 @@ export class DataSyncService {
             }
           }
         } catch (error) {
-          errors.push({ id: remoteItem.id, error: String(error) });
+          errors.push({ id: remoteItem.id, error: error instanceof Error ? error.message : String(error) });
         }
       }
 
-      console.log(`[DataSync] ${config.tableName} 同步完成: ${synced} 条, ${errors.length} 条失败`);
+      console.log(`[DataSync] ${String(config.tableName)} 同步完成: ${synced} 条, ${errors.length} 条失败`);
 
       return {
         success: errors.length === 0,
@@ -295,12 +295,12 @@ export class DataSyncService {
         errors,
       };
     } catch (error) {
-      console.error(`[DataSync] 从服务器同步 ${config.tableName} 失败:`, error);
+      console.error(`[DataSync] 从服务器同步 ${String(config.tableName)} 失败:`, error);
       return {
         success: false,
         synced: 0,
         failed: 0,
-        errors: [{ id: 'all', error: String(error) }],
+        errors: [{ id: 'all', error: error instanceof Error ? error.message : String(error) }],
       };
     }
   }

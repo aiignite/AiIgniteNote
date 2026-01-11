@@ -13,7 +13,7 @@ import MarkdownEditor from "./MarkdownEditor";
 import RichTextEditor from "./RichTextEditor";
 import DrawIOEditor from "./DrawIOEditor";
 import MindMapEditor from "./MindMapEditor";
-import MonacoEditor from "./MonacoEditor";
+// import MonacoEditor from "./MonacoEditor";
 
 // 编辑器配置注册表
 export const EDITOR_REGISTRY: EditorConfig[] = [
@@ -49,14 +49,14 @@ export const EDITOR_REGISTRY: EditorConfig[] = [
     component: MindMapEditor,
     supportedActions: ["download", "upload", "fullscreen", "exportImage"],
   },
-  {
-    type: NoteFileType.MONACO,
-    name: "代码编辑器",
-    icon: <CodeOutlined />,
-    description: "Monaco 代码编辑器，支持多种编程语言",
-    component: MonacoEditor,
-    supportedActions: ["download", "upload", "fullscreen"],
-  },
+  // {
+  //   type: NoteFileType.MONACO,
+  //   name: "代码编辑器",
+  //   icon: <CodeOutlined />,
+  //   description: "Monaco 代码编辑器，支持多种编程语言",
+  //   component: MonacoEditor,
+  //   supportedActions: ["download", "upload", "fullscreen"],
+  // },
 ];
 
 // 根据 fileType 获取编辑器配置

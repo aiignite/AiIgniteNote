@@ -33,7 +33,7 @@ export const usersApi = {
     page?: number;
     limit?: number;
     search?: string;
-  }) => apiClient.get<UsersResponse>("/users", { params }),
+  }) => apiClient.get("/users", { params }),
 
   // Get current user
   getMe: () => apiClient.get("/users/me"),

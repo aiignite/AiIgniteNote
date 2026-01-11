@@ -115,8 +115,10 @@ export function toLocalNote(serverNote: any): LocalNote {
     version: serverNote.version || 1,
     fileType: serverNote.fileType || "markdown",
     metadata: serverNote.metadata,
-    syncedAt: serverNote.syncedAt,
-    pendingSync: serverNote.pendingSync,
+    synced: true,
+    pendingSync: false,
+    needsServerId: false,
+    syncedAt: serverNote.syncedAt ? new Date(serverNote.syncedAt).getTime() : undefined,
     serverVersion: serverNote.serverVersion,
   };
 }

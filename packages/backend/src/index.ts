@@ -17,11 +17,15 @@ const allowedOrigins = [
   "http://localhost:5173",
   "http://127.0.0.1:3100",
   "http://127.0.0.1:5173",
+  // 生产环境
+  "http://aiignite.com.cn",
+  "https://aiignite.com.cn",
   // 局域网访问
   "http://172.16.17.66:3100",
   "http://192.168.201.97:3100",
   "http://172.21.208.1:3100",
   "http://172.30.224.1:3100",
+  // 允许所有 IP 地址访问（用于开发测试）
 ];
 
 await fastify.register(cors, {
@@ -29,11 +33,33 @@ await fastify.register(cors, {
     // 允许没有 origin 的请求（比如移动应用、Postman 等）
     if (!origin) return callback(null, true);
 
+    // 检查是否在允许列表中
     if (allowedOrigins.indexOf(origin) !== -1) {
       callback(null, true);
-    } else {
-      callback(new Error("Not allowed by CORS"), false);
+      return;
     }
+
+    // 检查是否是 IP 地址访问（开发环境）
+    try {
+      const url = new URL(origin);
+      // 如果是 IP 地址或 localhost
+      if (/^(\d+\.){3}\d+:\d+$/.test(origin) ||
+          /^localhost:\d+$/.test(origin) ||
+          /^127\.0\.0\.1:\d+$/.test(origin)) {
+        callback(null, true);
+        return;
+      }
+    } catch (e) {
+      // URL 解析失败，拒绝
+    }
+
+    // 检查是否是 aiignite.com.cn 的任何子域名或端口
+    if (origin.includes('aiignite.com.cn') || origin.includes('43.156.7.244')) {
+      callback(null, true);
+      return;
+    }
+
+    callback(new Error("Not allowed by CORS"), false);
   },
   credentials: true,
 });

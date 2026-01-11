@@ -34,7 +34,7 @@ import {
   SHADOW,
   TRANSITION,
 } from "../../../styles/design-tokens";
-import { BUILT_IN_ASSISTANTS } from "../../../store/aiStore";
+import { BUILT_IN_ASSISTANTS } from "../../../config/assistants.config";
 
 // ============================================
 // 动画

@@ -16,7 +16,7 @@ import {
   TRANSITION,
 } from "../../../styles/design-tokens";
 import AIAssistantsSettings from "./AIAssistantsSettings";
-import ModelsSettings from "./ModelsSettings";
+import AiModels from "./AiModels";
 import ModelsUsage from "./ModelsUsage";
 import ConversationHistory from "./ConversationHistory";
 
@@ -139,7 +139,7 @@ const tabItems: TabItem[] = [
         模型管理
       </span>
     ),
-    children: <ModelsSettings />,
+    children: <AiModels />,
   },
   {
     key: "assistants",

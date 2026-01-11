@@ -4,7 +4,41 @@
  */
 
 import { db } from "../../db";
-import { DrawIOGraphModel } from "../prompts/drawio-prompts";
+
+// 从 drawio-prompts.ts 中复制的类型定义
+export interface DrawIOGraphModel {
+  dx: number;
+  dy: number;
+  grid: number;
+  gridSize: number;
+  guides: number;
+  tooltips: number;
+  connect: number;
+  arrows: number;
+  fold: number;
+  page: number;
+  pageScale: number;
+  pageWidth: number;
+  pageHeight: number;
+  root?: {
+    mxCell: Array<{
+      id: string;
+      parent?: string;
+      value?: string;
+      style?: string;
+      vertex?: boolean;
+      edge?: boolean;
+      source?: string;
+      target?: string;
+      geometry?: {
+        x: number;
+        y: number;
+        width: number;
+        height: number;
+      };
+    }>;
+  };
+}
 
 /**
  * 获取 DrawIO 图表数据

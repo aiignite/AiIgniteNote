@@ -371,6 +371,9 @@ function WelcomePage() {
       tags: [],
       isDeleted: false,
       isFavorite: false,
+      synced: false,
+      pendingSync: true,
+      needsServerId: true,
     });
     navigate(`/notes/${newNote.id}`);
   };

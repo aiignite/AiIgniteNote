@@ -14,6 +14,7 @@ export const modelsApi = {
     temperature?: number;
     maxTokens?: number;
     topP?: number;
+    isPublic?: boolean;
   }) => apiClient.post("/models/configs", data),
 
   updateConfig: (

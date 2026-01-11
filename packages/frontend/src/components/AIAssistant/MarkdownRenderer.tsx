@@ -10,17 +10,15 @@ import mermaid from "mermaid";
 import katex from "katex";
 import "katex/dist/katex.min.css";
 
-// 导入代码高亮样式
-import "highlight.js/styles/github.css";
-
 // 初始化 Mermaid（只初始化一次）
-if (typeof window !== "undefined" && !mermaid.isInitialized) {
+let mermaidInitialized = false;
+if (typeof window !== "undefined" && !mermaidInitialized) {
   mermaid.initialize({
     startOnLoad: false,
     theme: "default",
     securityLevel: "loose",
   });
-  mermaid.isInitialized = true;
+  mermaidInitialized = true;
 }
 
 const MarkdownContainer = styled.div`
@@ -102,7 +100,36 @@ const MarkdownContainer = styled.div`
       padding: 0;
       font-size: 0.85em;
       line-height: 1.5;
+      color: #24292e;
     }
+  }
+
+  /* 代码高亮样式（rehype-highlight） */
+  pre code {
+    .hljs-string { color: #032f62; }
+    .hljs-number { color: #005cc5; }
+    .hljs-literal { color: #005cc5; }
+    .hljs-attr { color: #6f42c1; }
+    .hljs-variable { color: #24292e; }
+    .hljs-template-variable { color: #24292e; }
+    .hljs-class .hljs-title { color: #6f42c1; font-weight: bold; }
+    .hljs-function { color: #6f42c1; font-weight: bold; }
+    .hljs-function > .hljs-title { color: #6f42c1; }
+    .hljs-keyword { color: #d73a49; }
+    .hljs-comment { color: #6a737d; }
+    .hljs-regexp { color: #032f62; }
+    .hljs-tag { color: #22863a; }
+    .hljs-name { color: #e36209; }
+    .hljs-attr { color: #6f42c1; }
+    .hljs-type { color: #005cc5; }
+    .hljs-section { color: #6f42c1; font-weight: bold; }
+    .hljs-link { color: #032f62; }
+    .hljs-bullet { color: #005cc5; }
+    .hljs-subst { color: #24292e; }
+    .hljs-emphasis { font-style: italic; }
+    .hljs-strong { font-weight: bold; }
+    .hljs-built_in { color: #005cc5; }
+    .hljs-symbol { color: #e36209; }
   }
 
   /* 引用样式 */
@@ -223,7 +250,15 @@ const MermaidComponent: React.FC<{ chart: string }> = React.memo(({ chart }) => 
   React.useEffect(() => {
     if (ref.current) {
       try {
-        mermaid.render(ref.current, chart).catch((err) => {
+        // Generate unique ID for this mermaid chart
+        const id = `mermaid-${Math.random().toString(36).substr(2, 9)}`;
+
+        // Use the correct mermaid.render API (returns a Promise with SVG string)
+        mermaid.render(id, chart).then((result) => {
+          if (ref.current) {
+            ref.current.innerHTML = result.svg;
+          }
+        }).catch((err) => {
           console.error("Mermaid render error:", err);
           setError(true);
         });
@@ -305,7 +340,8 @@ function MarkdownRenderer({ content }: MarkdownRendererProps) {
         rehypePlugins={[rehypeHighlight, rehypeRaw]}
         components={{
           // 自定义代码块渲染
-          code({ node, inline, className, children, ...props }) {
+          code(props: any) {
+            const { node, inline, className, children, ...restProps } = props;
             const match = /language-(\w+)/.exec(className || "");
             const language = match ? match[1] : "";
 
@@ -338,7 +374,7 @@ function MarkdownRenderer({ content }: MarkdownRendererProps) {
 
             // 行内代码
             return (
-              <code className={className} {...props}>
+              <code className={className} {...restProps}>
                 {children}
               </code>
             );

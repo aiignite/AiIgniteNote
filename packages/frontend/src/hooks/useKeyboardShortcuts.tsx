@@ -85,6 +85,9 @@ export function useGlobalKeyboardShortcuts() {
       isDeleted: false,
       isFavorite: false,
       fileType: lastUsedFileType as any,
+      synced: false,
+      pendingSync: true,
+      needsServerId: true,
     });
 
     // 设置为当前笔记并导航

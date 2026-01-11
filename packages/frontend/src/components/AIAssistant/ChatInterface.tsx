@@ -16,11 +16,11 @@ import {
   DownOutlined,
 } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
-import { useAIStore } from "../../store/aiStore";
+import { useAIStore, type AIAssistant } from "../../store/aiStore";
 import { AIConversation, AIMessage } from "../../types";
 import styled, { keyframes, css } from "styled-components";
 import MarkdownRenderer from "./MarkdownRenderer";
-import AssistantEditModal, { AIAssistant } from "./AssistantEditModal";
+import AssistantEditModal from "./AssistantEditModal";
 import {
   COLORS,
   TYPOGRAPHY,
@@ -1064,7 +1064,7 @@ function ChatInterface({ noteId }: ChatInterfaceProps) {
       const isEmptySelection =
         !selectedContent.text ||
         selectedContent.text.trim() === "" ||
-        selectedContent.type === "empty";
+        !selectedContent.text;
 
       if (!isEmptySelection) {
         // 构建提示文本

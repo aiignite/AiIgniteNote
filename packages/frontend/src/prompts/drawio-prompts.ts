@@ -19,7 +19,6 @@ export const DRAWIO_ASSISTANT_CONFIG: AIAssistant = {
     "专业的 DrawIO 图表设计助手，支持流程图、架构图、UML 等多种图表类型",
   avatar: "📊",
   model: "", // 使用用户配置的默认模型
-  isBuiltIn: true,
   isActive: true,
   systemPrompt: buildDrawIOSystemPrompt(),
 };

@@ -22,7 +22,10 @@
       "Bash(timeout /t 3)",
       "Bash(ipconfig:*)",
       "Bash(npx prisma db seed:*)",
-      "Bash(npx tsx:*)"
+      "Bash(npx tsx:*)",
+      "Bash(pnpm run build:*)",
+      "Bash(pnpm run build:only:*)",
+      "Bash(set NODE_OPTIONS=--max-old-space-size=8192)"
     ]
   }
 }

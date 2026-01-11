@@ -75,6 +75,7 @@ export default defineConfig({
       "@ainote/shared": "/packages/shared/src",
     },
   },
+  assetsInclude: ['**/*.png'],
   optimizeDeps: {
     include: [
       // 预构建 Monaco 编辑器
@@ -83,17 +84,28 @@ export default defineConfig({
     ],
     exclude: ["@monaco-editor/react/lib"], // 排除一些不必要的预构建
   },
-  assetsInclude: ["**/*.html"],
   // 启用 publicDir，这样 public/drawio 文件夹会被 Vite 自动处理
   publicDir: "public",
   build: {
+    target: 'es2015',
+    chunkSizeWarningLimit: 3000,
+    minify: 'esbuild',
     rollupOptions: {
       output: {
-        manualChunks: {
-          // 将 Monaco Editor 单独打包
-          "monaco-editor": ["monaco-editor"],
+        manualChunks: (id) => {
+          // 使用更简单的分割策略，只分离最大的库
+          if (id.includes('node_modules')) {
+            // Monaco Editor 非常大，单独分离
+            if (id.includes('monaco-editor')) {
+              return 'monaco-editor';
+            }
+            // 其他所有 node_modules 放在一起，避免循环依赖
+            return 'vendor';
+          }
         },
       },
     },
+    // 减少内存使用
+    sourcemap: false,
   },
 });

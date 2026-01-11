@@ -30,3 +30,9 @@ dist-ssr
 
 # Documentation (development/internal docs kept in docs/ folder)
 docs/
+.claude/settings.local.json
+packages/backend/ecosystem.config.cjs
+packages/frontend/package.json
+packages/frontend/vite.config.ts
+packages/frontend/web.config
+packages/frontend/tsconfig.json
