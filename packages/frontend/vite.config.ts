@@ -87,12 +87,51 @@ export default defineConfig({
   // 启用 publicDir，这样 public/drawio 文件夹会被 Vite 自动处理
   publicDir: "public",
   build: {
+    // 生产构建优化
+    target: 'es2015',
+    minify: 'terser',
+    sourcemap: false,
+    cssCodeSplit: true,
+    chunkSizeWarningLimit: 1000,
     rollupOptions: {
       output: {
+        // 优化代码分割
         manualChunks: {
           // 将 Monaco Editor 单独打包
           "monaco-editor": ["monaco-editor"],
+          // React相关库
+          "react-vendor": ["react", "react-dom", "react-router-dom"],
+          // UI组件库
+          "ui-vendor": ["antd", "@ant-design/icons"],
+          // 编辑器相关
+          "editor-vendor": ["@tiptap/react", "@tiptap/starter-kit", "@tiptap/extensions"],
+          // 工具库
+          "utils-vendor": ["lodash-es", "dayjs", "zustand"],
         },
+        // 文件命名策略
+        chunkFileNames: 'assets/js/[name]-[hash].js',
+        entryFileNames: 'assets/js/[name]-[hash].js',
+        assetFileNames: (assetInfo) => {
+          const info = assetInfo.name.split('.');
+          const ext = info[info.length - 1];
+          if (/\.(mp4|webm|ogg|mp3|wav|flac|aac)(\?.*)?$/i.test(assetInfo.name)) {
+            return `assets/media/[name]-[hash].${ext}`;
+          }
+          if (/\.(png|jpe?g|gif|svg|ico|webp)(\?.*)?$/i.test(assetInfo.name)) {
+            return `assets/images/[name]-[hash].${ext}`;
+          }
+          if (/\.(woff2?|eot|ttf|otf)(\?.*)?$/i.test(assetInfo.name)) {
+            return `assets/fonts/[name]-[hash].${ext}`;
+          }
+          return `assets/[ext]/[name]-[hash].${ext}`;
+        },
+      },
+    },
+    // Terser压缩选项
+    terserOptions: {
+      compress: {
+        drop_console: true,
+        drop_debugger: true,
       },
     },
   },
